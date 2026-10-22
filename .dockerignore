@@ -1,0 +1,9 @@
+.git
+.DS_Store
+.env
+.env.*
+!.env.example
+tmp/
+*.log
+coverage.*
+*.test
