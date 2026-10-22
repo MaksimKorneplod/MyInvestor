@@ -6,7 +6,7 @@ MyInvestor — симулятор трейдинга, который позво�
 
 ## Требования
 
-- Go 1.24.2 или новее
+- Go 1.26.10
 - Git
 - Docker Desktop (Windows/macOS) либо Docker Engine и Compose plugin (Linux) — только если нужна локальная PostgreSQL
 
