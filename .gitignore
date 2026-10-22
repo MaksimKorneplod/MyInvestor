@@ -21,6 +21,12 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# Air build output and other temporary files
+tmp/
+
+# macOS Finder metadata
+.DS_Store
+
 # Go workspace file
 go.work
 go.work.sum
