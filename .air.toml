@@ -3,9 +3,11 @@ tmp_dir = "tmp"
 
 [build]
 cmd = "go build -o ./tmp/main.exe ./cmd/api"
-bin = "./tmp/main.exe"
+entrypoint = "./tmp/main.exe"
 include_ext = ["go"]
 exclude_dir = ["tmp", "vendor", ".git"]
+send_interrupt = true
+kill_delay = 5000
 
 [log]
 time = true
