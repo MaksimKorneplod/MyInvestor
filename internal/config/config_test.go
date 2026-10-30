@@ -8,6 +8,7 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "")
 	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/dbname")
 
 	got, err := Load()
 	if err != nil {
@@ -25,6 +26,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadEnvironmentValues(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":9090")
 	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/dbname")
 
 	got, err := Load()
 	if err != nil {
@@ -42,9 +44,19 @@ func TestLoadEnvironmentValues(t *testing.T) {
 func TestLoadInvalidLogLevel(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":8080")
 	t.Setenv("LOG_LEVEL", "verbose")
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost:5432/test")
 
 	_, err := Load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want an error for invalid LOG_LEVEL")
+	}
+}
+
+func TestLoadMissingDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want an error for missing DATABASE_URL")
 	}
 }

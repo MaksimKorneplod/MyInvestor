@@ -16,5 +16,21 @@ services:
       retries: 5
     restart: unless-stopped
 
+  db-test:
+    image: postgres:15-alpine
+    profiles: ["test"]
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_USER: investor_test
+      POSTGRES_PASSWORD: investor_test
+      POSTGRES_DB: myinvestor_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: "no"
+
 volumes:
   pgdata:

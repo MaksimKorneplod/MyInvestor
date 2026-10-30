@@ -8,11 +8,18 @@ import (
 )
 
 type Config struct {
-	HTTPAddr string
-	LogLevel slog.Level
+	HTTPAddr    string
+	LogLevel    slog.Level
+	DatabaseURL string
 }
 
 func Load() (Config, error) {
+
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL environment variable is not set")
+	}
+
 	addr := os.Getenv("HTTP_ADDR")
 	if addr == "" {
 		addr = ":8080"
@@ -33,7 +40,8 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		HTTPAddr: addr,
-		LogLevel: level,
+		HTTPAddr:    addr,
+		LogLevel:    level,
+		DatabaseURL: databaseURL,
 	}, nil
 }
