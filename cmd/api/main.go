@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MaksimKorneplod/MyInvestor/internal/config"
+	"github.com/MaksimKorneplod/MyInvestor/internal/database"
 	"github.com/MaksimKorneplod/MyInvestor/internal/handler"
 )
 
@@ -37,6 +38,15 @@ func main() {
 		Level: cfg.LogLevel,
 	}))
 	slog.SetDefault(logger)
+
+	slog.Info("Connecting to the database")
+	dbPool, err := database.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("Failed to connect to the database", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("Connected to the database successfully")
+	defer dbPool.Close()
 
 	mux := http.NewServeMux()
 
