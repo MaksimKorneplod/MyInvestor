@@ -1,0 +1,241 @@
+openapi: 3.0.3
+info:
+  title: MyInvestor API
+  version: 1.0.0
+  description: |
+    HTTP API contract for the MyInvestor backend.
+    Authentication uses opaque bearer tokens. Tokens expire 24 hours after
+    login and are revoked when the user logs out.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      summary: Get application health
+      responses:
+        '200':
+          description: The application is running.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - app
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  app:
+                    type: string
+                    example: MyInvestor
+              example:
+                status: ok
+                app: MyInvestor
+
+  /api/v1/register:
+    post:
+      operationId: registerUser
+      summary: Register a user
+      description: Creates a user account and its initial profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+              properties:
+                username:
+                  type: string
+                  example: johndoe
+                email:
+                  type: string
+                  format: email
+                  example: johndoe@example.com
+                password:
+                  type: string
+                  format: password
+                  writeOnly: true
+                  example: example-password
+            example:
+              username: johndoe
+              email: johndoe@example.com
+              password: example-password
+      responses:
+        '201':
+          description: The account was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                username: johndoe
+                email: johndoe@example.com
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: An account with this email already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: An account with this email already exists.
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/login:
+    post:
+      operationId: login
+      summary: Start an authenticated session
+      description: |
+        On success, returns an opaque bearer token valid for 24 hours.
+        Invalid email and password combinations return the same response
+        so the API does not reveal whether an email is registered.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: johndoe@example.com
+                password:
+                  type: string
+                  format: password
+                  writeOnly: true
+                  example: example-password
+            example:
+              email: johndoe@example.com
+              password: example-password
+      responses:
+        '200':
+          description: Authentication succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accessToken
+                  - tokenType
+                  - expiresIn
+                properties:
+                  accessToken:
+                    type: string
+                    description: Opaque bearer token. Treat it as a secret.
+                    example: opaque-token-value
+                  tokenType:
+                    type: string
+                    enum: [Bearer]
+                  expiresIn:
+                    type: integer
+                    description: Token lifetime in seconds.
+                    example: 86400
+              example:
+                accessToken: opaque-token-value
+                tokenType: Bearer
+                expiresIn: 86400
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: The email or password is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid email or password.
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/logout:
+    post:
+      operationId: logout
+      summary: End the current session
+      description: Revokes the bearer token used for this request.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: The session was ended.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Send the session token in the Authorization header as
+        `Authorization: Bearer <token>`. Tokens expire after 24 hours.
+        A successful logout revokes the token.
+  schemas:
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - email
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        username:
+          type: string
+          example: johndoe
+        email:
+          type: string
+          format: email
+          example: johndoe@example.com
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+          example: Invalid input data.
+  responses:
+    BadRequest:
+      description: The request body is malformed or contains invalid fields.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid input data.
+    Unauthorized:
+      description: The bearer token is missing, invalid, expired, or revoked.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Authentication required.
+    InternalServerError:
+      description: An unexpected server error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Internal server error.
