@@ -1,334 +1,124 @@
 package moex
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"regexp"
-	"sort"
+	"strconv"
 	"time"
 )
 
+// Instrument — путь ISS, а не произвольный URL: движок, рынок, режим, бумага.
+// Пустой Board повторяет iOS-адрес без режима: /engines/stock/markets/shares/...
+type Instrument struct {
+	Engine   string
+	Market   string
+	Board    string
+	Security string
+}
+
+// SecuritiesQuery — список инструментов рынка или режима.
+type SecuritiesQuery struct {
+	Instrument Instrument
+}
+
+// Security — бумага из блока securities: SECID и SHORTNAME.
+type Security struct {
+	SecID     string
+	ShortName string
+}
+
+// Quote — последняя котировка из блока marketdata.
+// Last всегда заполнен: строка без LAST в список не попадает, как в iOS.
+// LastChangePercent == nil, если в ячейке null.
+type Quote struct {
+	SecID             string
+	Last              *Decimal
+	LastChangePercent *Decimal
+}
+
+// HistoryQuery — свечи бумаги. Исторический ряд графика в MOEXService
+// берётся из candles.json, не из дневного /iss/history.
+type HistoryQuery struct {
+	Instrument Instrument
+	From       time.Time
+	Till       time.Time
+	Interval   int
+}
+
+// HistoryRow — одна свеча. ChartView рисует отрезок от Open к Close.
+type HistoryRow struct {
+	Begin time.Time
+	Open  Decimal
+	Close Decimal
+}
+
+// Decimal хранит десятичную запись числа так, как её прислал ISS.
+type Decimal struct {
+	text string
+}
+
+// String возвращает исходную запись числа.
+func (d Decimal) String() string { return d.text }
+
+// Float64 нужен графику. Для хранения котировки используется String.
+func (d Decimal) Float64() (float64, error) {
+	if d.text == "" {
+		return 0, fmt.Errorf("%w: empty decimal", ErrParse)
+	}
+	return strconv.ParseFloat(d.text, 64)
+}
+
+// ChartPeriod повторяет enum графика iOS.
+type ChartPeriod string
+
 const (
-	dateLayout = "2006-01-02"
-	timeLayout = "2006-01-02 15:04:05"
-	maxPages   = 100
+	PeriodDay       ChartPeriod = "day"
+	PeriodWeek      ChartPeriod = "week"
+	PeriodMonth     ChartPeriod = "month"
+	PeriodHalfYear  ChartPeriod = "halfYear"
+	PeriodYear      ChartPeriod = "year"
+	PeriodFiveYears ChartPeriod = "fiveYears"
 )
 
-var token = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
-
-func ident(kind, value string) error {
-	if !token.MatchString(value) {
-		return fmt.Errorf("%w: %s %q", ErrRequest, kind, value)
-	}
-	return nil
+type periodSpec struct {
+	interval int
+	daysBack int
 }
 
-// table — один блок ISS: columns и data в одном порядке.
-type table struct {
-	Columns []string            `json:"columns"`
-	Data    [][]json.RawMessage `json:"data"`
+// Коды interval — коды ISS из Candle.moexIntervalForPeriod.
+var periodSpecs = map[ChartPeriod]periodSpec{
+	PeriodDay:       {interval: 1, daysBack: 2},
+	PeriodWeek:      {interval: 60, daysBack: 14},
+	PeriodMonth:     {interval: 60, daysBack: 35},
+	PeriodHalfYear:  {interval: 24, daysBack: 190},
+	PeriodYear:      {interval: 7, daysBack: 370},
+	PeriodFiveYears: {interval: 7, daysBack: 1900},
 }
 
-func decodeTables(body []byte) (map[string]table, error) {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil || raw == nil {
-		return nil, &ParseError{Reason: "json"}
+// HistoryQuery собирает запрос свечей так же, как Candle.fetchCandles:
+// рынок акций, без режима, окно и interval от периода.
+func (p ChartPeriod) HistoryQuery(security string, now time.Time) (HistoryQuery, error) {
+	spec, ok := periodSpecs[p]
+	if !ok || now.IsZero() {
+		return HistoryQuery{}, fmt.Errorf("%w: period %q", ErrRequest, p)
 	}
-	out := make(map[string]table, len(raw))
-	for name, payload := range raw {
-		if len(payload) == 0 || payload[0] != '{' {
-			continue
-		}
-		block, err := decodeTable(payload)
-		if err != nil {
-			return nil, err
-		}
-		out[name] = block
+	if err := ident("security", security); err != nil {
+		return HistoryQuery{}, err
 	}
-	return out, nil
+	today := now.In(moscow)
+	return HistoryQuery{
+		Instrument: Instrument{Engine: "stock", Market: "shares", Security: security},
+		From:       today.AddDate(0, 0, -spec.daysBack),
+		Till:       today,
+		Interval:   spec.interval,
+	}, nil
 }
 
-// decodeTable отличает корректный пустой список "data":[] от отсутствующего поля.
-// Пустой массив — страница без строк. Нет поля, null или не массив — ErrParse.
-func decodeTable(payload json.RawMessage) (table, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &fields); err != nil || fields == nil {
-		return table{}, &ParseError{Reason: "block"}
-	}
-	var block table
-	if rawColumns, ok := fields["columns"]; ok && !isNull(rawColumns) {
-		if err := json.Unmarshal(rawColumns, &block.Columns); err != nil {
-			return table{}, &ParseError{Reason: "columns"}
-		}
-	}
-	rawData, ok := fields["data"]
-	if !ok || isNull(rawData) {
-		return table{}, &ParseError{Reason: "missing data"}
-	}
-	rawData = bytes.TrimSpace(rawData)
-	if len(rawData) == 0 || rawData[0] != '[' {
-		return table{}, &ParseError{Reason: "data"}
-	}
-	if err := json.Unmarshal(rawData, &block.Data); err != nil {
-		return table{}, &ParseError{Reason: "data"}
-	}
-	if block.Data == nil {
-		block.Data = [][]json.RawMessage{}
-	}
-	return block, nil
-}
+var moscow = loadMoscow()
 
-func (t table) indexes(names ...string) (map[string]int, error) {
-	index := make(map[string]int, len(names))
-	for _, name := range names {
-		found := false
-		for i, column := range t.Columns {
-			if column == name {
-				index[name] = i
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, &ParseError{Reason: "missing column " + name}
-		}
-	}
-	return index, nil
-}
-
-func at(row []json.RawMessage, index int) (json.RawMessage, error) {
-	if index < 0 || index >= len(row) {
-		return nil, &ParseError{Reason: "short row"}
-	}
-	return row[index], nil
-}
-
-func isNull(raw json.RawMessage) bool {
-	return len(raw) == 0 || string(raw) == "null"
-}
-
-func cellString(raw json.RawMessage) (string, bool, error) {
-	if isNull(raw) {
-		return "", false, nil
-	}
-	var text string
-	if err := json.Unmarshal(raw, &text); err != nil {
-		return "", false, &ParseError{Reason: "string cell"}
-	}
-	return text, true, nil
-}
-
-func cellDecimal(raw json.RawMessage) (Decimal, bool, error) {
-	if isNull(raw) {
-		return Decimal{}, false, nil
-	}
-	var number json.Number
-	if err := json.Unmarshal(raw, &number); err != nil || number == "" {
-		return Decimal{}, false, &ParseError{Reason: "number cell"}
-	}
-	if _, err := number.Float64(); err != nil {
-		return Decimal{}, false, &ParseError{Reason: "number cell"}
-	}
-	return Decimal{text: number.String()}, true, nil
-}
-
-func cellInt(raw json.RawMessage) (int, error) {
-	number, ok, err := cellDecimal(raw)
-	if err != nil || !ok {
-		return 0, &ParseError{Reason: "cursor"}
-	}
-	value, err := strconvAtoi(number.text)
+func loadMoscow() *time.Location {
+	loc, err := time.LoadLocation("Europe/Moscow")
 	if err != nil {
-		return 0, &ParseError{Reason: "cursor"}
+		return time.FixedZone("MSK", 3*60*60)
 	}
-	return value, nil
-}
-
-func cursorNext(block table, current int) (int, bool, error) {
-	if len(block.Data) == 0 {
-		return 0, false, nil
-	}
-	index, err := block.indexes("INDEX", "TOTAL", "PAGESIZE")
-	if err != nil {
-		return 0, false, err
-	}
-	row := block.Data[0]
-	pos, err := requiredInt(row, index["INDEX"])
-	if err != nil {
-		return 0, false, err
-	}
-	total, err := requiredInt(row, index["TOTAL"])
-	if err != nil {
-		return 0, false, err
-	}
-	pageSize, err := requiredInt(row, index["PAGESIZE"])
-	if err != nil {
-		return 0, false, err
-	}
-	if pageSize <= 0 {
-		return 0, false, nil
-	}
-	next := pos + pageSize
-	if next <= current || next >= total {
-		return 0, false, nil
-	}
-	return next, true, nil
-}
-
-func requiredInt(row []json.RawMessage, index int) (int, error) {
-	raw, err := at(row, index)
-	if err != nil {
-		return 0, err
-	}
-	return cellInt(raw)
-}
-
-func parseSecurities(pages []table) ([]Security, error) {
-	out := make([]Security, 0)
-	for _, page := range pages {
-		index, err := page.indexes("SECID", "SHORTNAME")
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range page.Data {
-			rawID, err := at(row, index["SECID"])
-			if err != nil {
-				return nil, err
-			}
-			secid, ok, err := cellString(rawID)
-			if err != nil {
-				return nil, err
-			}
-			if !ok || secid == "" {
-				return nil, &ParseError{Reason: "SECID"}
-			}
-			rawName, err := at(row, index["SHORTNAME"])
-			if err != nil {
-				return nil, err
-			}
-			name, ok, err := cellString(rawName)
-			if err != nil {
-				return nil, err
-			}
-			if !ok || name == "" {
-				name = secid
-			}
-			out = append(out, Security{SecID: secid, ShortName: name})
-		}
-	}
-	return out, nil
-}
-
-func parseQuotes(pages []table) ([]Quote, error) {
-	out := make([]Quote, 0)
-	for _, page := range pages {
-		index, err := page.indexes("SECID", "LAST", "LASTCHANGEPRCNT")
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range page.Data {
-			rawID, err := at(row, index["SECID"])
-			if err != nil {
-				return nil, err
-			}
-			secid, ok, err := cellString(rawID)
-			if err != nil {
-				return nil, err
-			}
-			if !ok || secid == "" {
-				return nil, &ParseError{Reason: "SECID"}
-			}
-			rawLast, err := at(row, index["LAST"])
-			if err != nil {
-				return nil, err
-			}
-			last, hasLast, err := cellDecimal(rawLast)
-			if err != nil {
-				return nil, err
-			}
-			rawChange, err := at(row, index["LASTCHANGEPRCNT"])
-			if err != nil {
-				return nil, err
-			}
-			change, hasChange, err := cellDecimal(rawChange)
-			if err != nil {
-				return nil, err
-			}
-			if !hasLast {
-				continue
-			}
-			price := last
-			quote := Quote{SecID: secid, Last: &price}
-			if hasChange {
-				delta := change
-				quote.LastChangePercent = &delta
-			}
-			out = append(out, quote)
-		}
-	}
-	return out, nil
-}
-
-func parseHistory(pages []table) ([]HistoryRow, error) {
-	out := make([]HistoryRow, 0)
-	for _, page := range pages {
-		index, err := page.indexes("begin", "open", "close")
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range page.Data {
-			rawBegin, err := at(row, index["begin"])
-			if err != nil {
-				return nil, err
-			}
-			beginText, ok, err := cellString(rawBegin)
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, &ParseError{Reason: "begin"}
-			}
-			begin, err := time.ParseInLocation(timeLayout, beginText, moscow)
-			if err != nil {
-				return nil, &ParseError{Reason: "begin"}
-			}
-			rawOpen, err := at(row, index["open"])
-			if err != nil {
-				return nil, err
-			}
-			open, ok, err := cellDecimal(rawOpen)
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, &ParseError{Reason: "open"}
-			}
-			rawClose, err := at(row, index["close"])
-			if err != nil {
-				return nil, err
-			}
-			closePrice, ok, err := cellDecimal(rawClose)
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, &ParseError{Reason: "close"}
-			}
-			out = append(out, HistoryRow{Begin: begin, Open: open, Close: closePrice})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Begin.Before(out[j].Begin)
-	})
-	return out, nil
-}
-
-func strconvAtoi(text string) (int, error) {
-	var number json.Number = json.Number(text)
-	value, err := number.Float64()
-	if err != nil {
-		return 0, err
-	}
-	return int(value), nil
+	return loc
 }

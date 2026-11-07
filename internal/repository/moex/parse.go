@@ -1,6 +1,7 @@
 package moex
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -39,9 +40,9 @@ func decodeTables(body []byte) (map[string]table, error) {
 		if len(payload) == 0 || payload[0] != '{' {
 			continue
 		}
-		var block table
-		if err := json.Unmarshal(payload, &block); err != nil {
-			return nil, &ParseError{Reason: name}
+		block, err := decodeTable(payload)
+		if err != nil {
+			return nil, err
 		}
 		out[name] = block
 	}
@@ -75,7 +76,6 @@ func decodeTable(payload json.RawMessage) (table, error) {
 	}
 	return block, nil
 }
-
 
 func (t table) indexes(names ...string) (map[string]int, error) {
 	index := make(map[string]int, len(names))
