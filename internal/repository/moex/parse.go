@@ -48,6 +48,35 @@ func decodeTables(body []byte) (map[string]table, error) {
 	return out, nil
 }
 
+func decodeTable(payload json.RawMessage) (table, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil || fields == nil {
+		return table{}, &ParseError{Reason: "block"}
+	}
+	var block table
+	if rawColumns, ok := fields["columns"]; ok && !isNull(rawColumns) {
+		if err := json.Unmarshal(rawColumns, &block.Columns); err != nil {
+			return table{}, &ParseError{Reason: "columns"}
+		}
+	}
+	rawData, ok := fields["data"]
+	if !ok || isNull(rawData) {
+		return table{}, &ParseError{Reason: "missing data"}
+	}
+	rawData = bytes.TrimSpace(rawData)
+	if len(rawData) == 0 || rawData[0] != '[' {
+		return table{}, &ParseError{Reason: "data"}
+	}
+	if err := json.Unmarshal(rawData, &block.Data); err != nil {
+		return table{}, &ParseError{Reason: "data"}
+	}
+	if block.Data == nil {
+		block.Data = [][]json.RawMessage{}
+	}
+	return block, nil
+}
+
+
 func (t table) indexes(names ...string) (map[string]int, error) {
 	index := make(map[string]int, len(names))
 	for _, name := range names {
