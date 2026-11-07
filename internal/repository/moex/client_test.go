@@ -269,6 +269,27 @@ func TestExternalErrors(t *testing.T) {
 				body: `{"candles":{"columns":["begin","open","close"],"data":[["2026-03-01 10:00:00",null,1]]}}`,
 				call: func(c *Client) error { return call(c.History(context.Background(), sampleHistory())) },
 			},
+						{
+				name: "missing data",
+				body: `{"securities":{"columns":["SECID","SHORTNAME"]}}`,
+				call: func(c *Client) error {
+					return call(c.Securities(context.Background(), SecuritiesQuery{Instrument: shares()}))
+				},
+			},
+			{
+				name: "null data",
+				body: `{"securities":{"columns":["SECID","SHORTNAME"],"data":null}}`,
+				call: func(c *Client) error {
+					return call(c.Securities(context.Background(), SecuritiesQuery{Instrument: shares()}))
+				},
+			},
+			{
+				name: "data is not array",
+				body: `{"securities":{"columns":["SECID","SHORTNAME"],"data":{}}}`,
+				call: func(c *Client) error {
+					return call(c.Securities(context.Background(), SecuritiesQuery{Instrument: shares()}))
+				},
+			},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
