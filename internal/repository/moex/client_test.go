@@ -269,7 +269,7 @@ func TestExternalErrors(t *testing.T) {
 				body: `{"candles":{"columns":["begin","open","close"],"data":[["2026-03-01 10:00:00",null,1]]}}`,
 				call: func(c *Client) error { return call(c.History(context.Background(), sampleHistory())) },
 			},
-						{
+			{
 				name: "missing data",
 				body: `{"securities":{"columns":["SECID","SHORTNAME"]}}`,
 				call: func(c *Client) error {
@@ -404,6 +404,21 @@ func TestSamePageDoesNotLoop(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
+func TestFractionalCursorIsParseError(t *testing.T) {
+	t.Parallel()
+	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{
+			"securities": {"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"]]},
+			"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[0,3,2.5]]}
+		}`)
+	})
+
+	_, err := client.Securities(context.Background(), SecuritiesQuery{Instrument: shares()})
+	if !errors.Is(err, ErrParse) {
+		t.Fatalf("err = %v", err)
 	}
 }
 

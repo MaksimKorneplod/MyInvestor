@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -136,7 +137,8 @@ func cellInt(raw json.RawMessage) (int, error) {
 	if err != nil || !ok {
 		return 0, &ParseError{Reason: "cursor"}
 	}
-	value, err := strconvAtoi(number.text)
+	// Курсор — целое. 2.5 нельзя молча обрезать до 2: это битый ответ.
+	value, err := strconv.Atoi(number.text)
 	if err != nil {
 		return 0, &ParseError{Reason: "cursor"}
 	}
@@ -320,13 +322,4 @@ func parseHistory(pages []table) ([]HistoryRow, error) {
 		return out[i].Begin.Before(out[j].Begin)
 	})
 	return out, nil
-}
-
-func strconvAtoi(text string) (int, error) {
-	var number json.Number = json.Number(text)
-	value, err := number.Float64()
-	if err != nil {
-		return 0, err
-	}
-	return int(value), nil
 }
