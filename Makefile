@@ -24,4 +24,4 @@ test-db-down:
 
 test-integration:
 	@test -n "$(TEST_DATABASE_URL)" || (echo "Set TEST_DATABASE_URL to an isolated *_test database" >&2; exit 1)
-	go test -count=1 -run '^TestConnectAgainstIsolatedDatabase$$' ./internal/database
+	go test -count=1 ./internal/database
