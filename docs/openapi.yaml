@@ -103,67 +103,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SchoolRegistrationError'
-
-  /api/v1/register:
+  /api/v1/student/login:
     post:
-      operationId: registerUser
-      summary: Register a user
-      description: Creates a user account and its initial profile.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - username
-                - email
-                - password
-              properties:
-                username:
-                  type: string
-                  example: johndoe
-                email:
-                  type: string
-                  format: email
-                  example: johndoe@example.com
-                password:
-                  type: string
-                  format: password
-                  writeOnly: true
-                  example: example-password
-            example:
-              username: johndoe
-              email: johndoe@example.com
-              password: example-password
-      responses:
-        '201':
-          description: The account was created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-              example:
-                id: 123e4567-e89b-12d3-a456-426614174000
-                username: johndoe
-                email: johndoe@example.com
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '409':
-          description: An account with this email already exists.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error: An account with this email already exists.
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /api/v1/login:
-    post:
-      operationId: login
-      summary: Start an authenticated session
+      operationId: loginStudent
+      summary: Start an authenticated session for student
       description: |
         On success, returns an opaque bearer token valid for 24 hours.
         Invalid email and password combinations return the same response
