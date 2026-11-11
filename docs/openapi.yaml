@@ -35,66 +35,78 @@ paths:
                 status: ok
                 app: MyInvestor
 
-  /api/v1/register:
+  /api/v1/schools/register:
     post:
-      operationId: registerUser
-      summary: Register a user
-      description: Creates a user account and its initial profile.
+      operationId: registerSchool
+      summary: Register a school
+      description: Creates the school account. It does not create a student or a student profile.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required:
-                - username
-                - email
-                - password
+              additionalProperties: false
+              required: [login, email, password]
               properties:
-                username:
+                login:
                   type: string
-                  example: johndoe
+                  minLength: 1
+                  maxLength: 50
                 email:
                   type: string
                   format: email
-                  example: johndoe@example.com
+                  maxLength: 254
                 password:
                   type: string
                   format: password
                   writeOnly: true
-                  example: example-password
-            example:
-              username: johndoe
-              email: johndoe@example.com
-              password: example-password
+                  description: From 8 to 1024 bytes.
       responses:
         '201':
-          description: The account was created.
+          description: The school was created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-              example:
-                id: 123e4567-e89b-12d3-a456-426614174000
-                username: johndoe
-                email: johndoe@example.com
+                type: object
+                required: [school_id, login, email]
+                properties:
+                  school_id:
+                    type: string
+                    format: uuid
+                  login:
+                    type: string
+                  email:
+                    type: string
+                    format: email
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '409':
-          description: An account with this email already exists.
+          description: The request is malformed or contains invalid fields.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error: An account with this email already exists.
+                $ref: '#/components/schemas/SchoolRegistrationError'
+        '409':
+          description: The school email or login is already registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolRegistrationError'
         '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /api/v1/login:
+          description: Registration failed unexpectedly.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolRegistrationError'
+        '503':
+          description: Too many school registrations are being processed. Retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolRegistrationError'
+  /api/v1/student/login:
     post:
-      operationId: login
-      summary: Start an authenticated session
+      operationId: loginStudent
+      summary: Start an authenticated session for student
       description: |
         On success, returns an opaque bearer token valid for 24 hours.
         Invalid email and password combinations return the same response
@@ -187,6 +199,18 @@ components:
         `Authorization: Bearer <token>`. Tokens expire after 24 hours.
         A successful logout revokes the token.
   schemas:
+    SchoolRegistrationError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
     User:
       type: object
       required:
