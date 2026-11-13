@@ -14,8 +14,11 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/database"
 	"github.com/MaksimKorneplod/MyInvestor/internal/handler"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository"
+	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 	"github.com/MaksimKorneplod/MyInvestor/internal/service"
 )
+
+const instrumentCatalogTTL = 30 * time.Minute
 
 func serverStart(server *http.Server) error {
 	slog.Info("Starting server", "addr", server.Addr)
@@ -54,6 +57,11 @@ func main() {
 
 	mux.HandleFunc("GET /api/v1/health", handler.HealthHandler)
 	mux.HandleFunc("POST /api/v1/schools/register", handler.SchoolRegistration(service.Registration{Store: repository.SchoolStore{Pool: dbPool}}))
+
+	moexClient := moex.New("")
+	stockAdapter := moex.NewStockAdapter(moexClient)
+	instrumentCatalog := service.NewCatalog(stockAdapter, instrumentCatalogTTL)
+	mux.HandleFunc("GET /api/v1/instruments", handler.InstrumentsHandler(instrumentCatalog))
 
 	port := cfg.HTTPAddr
 
