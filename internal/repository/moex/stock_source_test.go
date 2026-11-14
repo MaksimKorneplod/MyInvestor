@@ -126,6 +126,26 @@ func TestStockAdapterListStocksMapsClientErrors(t *testing.T) {
 	}
 }
 
+func TestStockAdapterListStocksMapsClientTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, WithTimeout(20*time.Millisecond))
+	_, err := NewStockAdapter(client).ListStocks(context.Background())
+	if !errors.Is(err, service.ErrSourceUnavailable) {
+		t.Fatalf("err = %v, want ErrSourceUnavailable", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want to preserve internal timeout cause", err)
+	}
+	if !errors.Is(err, ErrNetwork) {
+		t.Fatalf("err = %v, want to preserve ErrNetwork cause", err)
+	}
+}
+
 func TestStockAdapterListStocksDoesNotLogContextCancellation(t *testing.T) {
 	var logs strings.Builder
 	previousLogger := slog.Default()

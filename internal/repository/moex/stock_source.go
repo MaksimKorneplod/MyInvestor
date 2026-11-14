@@ -33,8 +33,8 @@ func (s *StockAdapter) ListStocks(ctx context.Context) ([]service.Instrument, er
 		Instrument: Instrument{Engine: "stock", Market: "shares", Board: "TQBR"},
 	})
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, err
+		if ctx != nil && ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 		slog.Error("moex stock source failed", "error", err)
 		return nil, fmt.Errorf("%w: %w", service.ErrSourceUnavailable, err)
