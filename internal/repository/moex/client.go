@@ -136,13 +136,14 @@ func (c *Client) quotes(ctx context.Context, ref Instrument) ([]Quote, error) {
 	query := url.Values{}
 	query.Set("iss.meta", "off")
 	query.Set("iss.only", "marketdata,marketdata.cursor")
-	query.Set("marketdata.columns", "SECID,LAST,LASTCHANGEPRCNT")
+	query.Set("marketdata.columns", "SECID,LAST,LASTCHANGEPRCNT,TIME")
 
-	pages, err := c.collect(ctx, path, query, "marketdata", "SECID", "LAST", "LASTCHANGEPRCNT")
+	pages, err := c.collect(ctx, path, query, "marketdata", "SECID", "LAST", "LASTCHANGEPRCNT", "TIME")
 	if err != nil {
 		return nil, err
 	}
-	rows, err := parseQuotes(pages)
+	receivedAt := time.Now().In(moscow)
+	rows, err := parseQuotes(pages, receivedAt)
 	if err != nil {
 		return nil, err
 	}

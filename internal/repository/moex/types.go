@@ -33,6 +33,8 @@ type Quote struct {
 	SecID             string
 	Last              *Decimal
 	LastChangePercent *Decimal
+	QuoteTime         *time.Time // время котировки на бирже
+	UpdateTime        time.Time  // время получения данных котировок программой
 }
 
 // HistoryQuery — свечи бумаги. Исторический ряд графика в MOEXService
