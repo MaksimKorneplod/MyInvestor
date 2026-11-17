@@ -138,7 +138,7 @@ func normalizeTickers(tickers []string) ([]string, error) {
 		if quotUpRegister == "" {
 			return nil, fmt.Errorf("%w: empty ticker", moex.ErrRequest)
 		}
-		if !tickerRegular.MatchString(quotUpRegister) {
+		if !tickerRe.MatchString(quotUpRegister) {
 			return nil, fmt.Errorf("%w: wrong ticker", moex.ErrRequest)
 		}
 		if _, ok := tickersIn[quotUpRegister]; ok {
