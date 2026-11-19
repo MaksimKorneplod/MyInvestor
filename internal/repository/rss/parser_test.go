@@ -62,6 +62,20 @@ func TestParseRssInvalidXML(t *testing.T) {
 	}
 }
 
+func TestParseRssRejectsNonRSSRoot(t *testing.T) {
+	_, err := parseRss(strings.NewReader(`<html><body>upstream error</body></html>`))
+	if err == nil {
+		t.Fatal("parseRss() error = nil, want non-RSS root error")
+	}
+}
+
+func TestParseRssRejectsMissingChannel(t *testing.T) {
+	_, err := parseRss(strings.NewReader(`<rss version="2.0"></rss>`))
+	if err == nil {
+		t.Fatal("parseRss() error = nil, want missing channel error")
+	}
+}
+
 func TestFilterRssFeed(t *testing.T) {
 	feed, err := filterRssFeed(strings.NewReader(testFeedXML))
 	if err != nil {

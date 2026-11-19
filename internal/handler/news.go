@@ -75,7 +75,11 @@ func NewsHandler(reader NewsReader) http.HandlerFunc {
 			return
 		}
 
-		items := orderedNews(feed.Channel.Items)
+		var feedItems []rss.RssItem
+		if feed.Channel != nil {
+			feedItems = feed.Channel.Items
+		}
+		items := orderedNews(feedItems)
 		total := len(items)
 		start := min(offset, total)
 		end := start + min(limit, total-start)

@@ -1,6 +1,7 @@
 package rss
 
 import (
+	"encoding/xml"
 	"fmt"
 	"strings"
 	"time"
@@ -23,7 +24,8 @@ type RssChannel struct {
 
 // Лента новостей (могут быть разные RSS-каналы)
 type RssFeed struct {
-	Channel RssChannel `xml:"channel"`
+	XMLName xml.Name    `xml:"rss"`
+	Channel *RssChannel `xml:"channel"`
 }
 
 func ParsePubDate(value string) (time.Time, error) {

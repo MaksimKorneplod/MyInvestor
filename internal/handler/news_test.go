@@ -21,7 +21,7 @@ func (s newsReaderStub) Read(context.Context) (rss.RssFeed, error) {
 }
 
 func TestNewsHandlerOrdersAndPaginates(t *testing.T) {
-	reader := newsReaderStub{feed: rss.RssFeed{Channel: rss.RssChannel{Items: []rss.RssItem{
+	reader := newsReaderStub{feed: rss.RssFeed{Channel: &rss.RssChannel{Items: []rss.RssItem{
 		{Title: "Old", Link: "https://example.com/old", PubDate: "Mon, 02 Jan 2006 10:00:00 GMT"},
 		{Title: "New", Link: "https://example.com/new", Description: "Latest", PubDate: "Wed, 04 Jan 2006 10:00:00 GMT"},
 		{Title: "Undated", Link: "https://example.com/undated"},
@@ -63,7 +63,7 @@ func TestNewsHandlerDefaultPaginationAndEmptyFeed(t *testing.T) {
 }
 
 func TestNewsHandlerReturnsNewsFields(t *testing.T) {
-	reader := newsReaderStub{feed: rss.RssFeed{Channel: rss.RssChannel{Items: []rss.RssItem{
+	reader := newsReaderStub{feed: rss.RssFeed{Channel: &rss.RssChannel{Items: []rss.RssItem{
 		{
 			Title:       "Latest",
 			Link:        "https://example.com/latest",

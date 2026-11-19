@@ -15,11 +15,14 @@ func parseRss(r io.Reader) (RssFeed, error) {
 	if err := decoder.Decode(&feed); err != nil {
 		return RssFeed{}, err
 	}
+	if feed.Channel == nil {
+		return RssFeed{}, errors.New("RSS document is missing channel")
+	}
 	return feed, nil
 }
 
 func filterRssFeed(r io.Reader) (RssFeed, error) {
-	var feed RssFeed
+	feed := RssFeed{Channel: &RssChannel{Items: make([]RssItem, 0)}}
 	parsedData, err := parseRss(r)
 	if err != nil {
 		return RssFeed{}, err
