@@ -14,6 +14,7 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/database"
 	"github.com/MaksimKorneplod/MyInvestor/internal/handler"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository"
+	"github.com/MaksimKorneplod/MyInvestor/internal/repository/rss"
 	"github.com/MaksimKorneplod/MyInvestor/internal/service"
 )
 
@@ -54,6 +55,12 @@ func main() {
 
 	mux.HandleFunc("GET /api/v1/health", handler.HealthHandler)
 	mux.HandleFunc("POST /api/v1/schools/register", handler.SchoolRegistration(service.Registration{Store: repository.SchoolStore{Pool: dbPool}}))
+	feedURL := os.Getenv("RSS_FEED_URL")
+	if feedURL == "" {
+		feedURL = rss.DefaultFeedURL
+	}
+	newsClient := rss.NewClient(&http.Client{Timeout: 10 * time.Second}, feedURL)
+	mux.HandleFunc("GET /api/v1/news", handler.NewsHandler(newsClient))
 
 	port := cfg.HTTPAddr
 
