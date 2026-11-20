@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 )
 
 // mockSource is a test stub for StockSource.
@@ -28,6 +30,55 @@ func stockList() []Instrument {
 		{ID: "TEST-ID-2", Ticker: "SBERP", Name: "Сбербанк-п"},
 		{ID: "TEST-ID-3", Ticker: "GAZP", Name: "Газпром"},
 		{ID: "TEST-ID-4", Ticker: "LKOH", Name: "ЛУКОЙЛ"},
+	}
+}
+
+type mockMOEXLister struct {
+	securities []moex.Security
+	err        error
+}
+
+func (m mockMOEXLister) List(context.Context) ([]moex.Security, error) {
+	return m.securities, m.err
+}
+
+func TestMOEXStockSourceMapsSecurities(t *testing.T) {
+	source := NewMOEXStockSource(mockMOEXLister{
+		securities: []moex.Security{
+			{SecID: "SBER", ShortName: "Сбербанк"},
+			{SecID: ""},
+			{SecID: "GAZP"},
+		},
+	})
+
+	instruments, err := source.ListStocks(context.Background())
+	if err != nil {
+		t.Fatalf("ListStocks: %v", err)
+	}
+	want := []Instrument{
+		{ID: "SBER", Ticker: "SBER", Name: "Сбербанк"},
+		{ID: "GAZP", Ticker: "GAZP", Name: "GAZP"},
+	}
+	if len(instruments) != len(want) {
+		t.Fatalf("instruments = %+v, want %+v", instruments, want)
+	}
+	for i := range want {
+		if instruments[i] != want[i] {
+			t.Errorf("instrument %d = %+v, want %+v", i, instruments[i], want[i])
+		}
+	}
+}
+
+func TestMOEXStockSourceReturnsListerError(t *testing.T) {
+	sourceErr := errors.New("MOEX unavailable")
+	source := NewMOEXStockSource(mockMOEXLister{err: sourceErr})
+
+	_, err := source.ListStocks(context.Background())
+	if err != sourceErr {
+		t.Fatalf("err = %v, want original error %v", err, sourceErr)
+	}
+	if !errors.Is(err, sourceErr) {
+		t.Fatalf("errors.Is(%v, sourceErr) = false", err)
 	}
 }
 

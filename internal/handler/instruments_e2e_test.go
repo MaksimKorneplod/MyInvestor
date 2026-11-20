@@ -30,8 +30,9 @@ func newInstrumentEndpoint(t *testing.T, timeout time.Duration, issHandler http.
 	t.Cleanup(iss.Close)
 
 	client := moex.New(iss.URL, moex.WithTimeout(timeout))
-	adapter := moex.NewStockAdapter(client)
-	catalog := service.NewCatalog(adapter, 30*time.Minute)
+	lister := moex.NewStockLister(client)
+	source := service.NewMOEXStockSource(lister)
+	catalog := service.NewCatalog(source, 30*time.Minute)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/instruments", handler.InstrumentsHandler(catalog))

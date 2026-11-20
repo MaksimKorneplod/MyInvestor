@@ -59,8 +59,9 @@ func main() {
 	mux.HandleFunc("POST /api/v1/schools/register", handler.SchoolRegistration(service.Registration{Store: repository.SchoolStore{Pool: dbPool}}))
 
 	moexClient := moex.New("")
-	stockAdapter := moex.NewStockAdapter(moexClient)
-	instrumentCatalog := service.NewCatalog(stockAdapter, instrumentCatalogTTL)
+	stockLister := moex.NewStockLister(moexClient)
+	stockSource := service.NewMOEXStockSource(stockLister)
+	instrumentCatalog := service.NewCatalog(stockSource, instrumentCatalogTTL)
 	mux.HandleFunc("GET /api/v1/instruments", handler.InstrumentsHandler(instrumentCatalog))
 
 	port := cfg.HTTPAddr

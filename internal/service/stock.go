@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 )
 
 // Instrument represents a stock instrument with stable identifier, ticker and display name.
@@ -19,6 +21,45 @@ type Instrument struct {
 // StockSource describes where the catalog data comes from.
 type StockSource interface {
 	ListStocks(ctx context.Context) ([]Instrument, error)
+}
+
+type moexSecurityLister interface {
+	List(ctx context.Context) ([]moex.Security, error)
+}
+
+type moexStockSource struct {
+	lister moexSecurityLister
+}
+
+var _ StockSource = (*moexStockSource)(nil)
+
+// NewMOEXStockSource converts MOEX securities into service instruments.
+func NewMOEXStockSource(lister moexSecurityLister) StockSource {
+	return &moexStockSource{lister: lister}
+}
+
+func (s *moexStockSource) ListStocks(ctx context.Context) ([]Instrument, error) {
+	securities, err := s.lister.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	instruments := make([]Instrument, 0, len(securities))
+	for _, security := range securities {
+		if security.SecID == "" {
+			continue
+		}
+		name := security.ShortName
+		if name == "" {
+			name = security.SecID
+		}
+		instruments = append(instruments, Instrument{
+			ID:     security.SecID,
+			Ticker: security.SecID,
+			Name:   name,
+		})
+	}
+	return instruments, nil
 }
 
 // ErrSourceUnavailable indicates that the external data source is temporarily unavailable.

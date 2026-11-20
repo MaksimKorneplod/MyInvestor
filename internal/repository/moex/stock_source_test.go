@@ -4,80 +4,56 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/MaksimKorneplod/MyInvestor/internal/service"
 )
 
-func TestStockAdapterListStocksMapsSecuritiesAndFiltersInvalidRows(t *testing.T) {
+func TestStockListerListTQBRAndReturnsAllPages(t *testing.T) {
+	var starts []string
+	var path string
 	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/iss/engines/stock/markets/shares/boards/TQBR/securities.json" {
-			t.Errorf("path = %q", r.URL.Path)
+		starts = append(starts, r.URL.Query().Get("start"))
+		path = r.URL.Path
+		if r.URL.Query().Get("start") == "0" {
+			_, _ = io.WriteString(w, `{
+				"securities": {"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"]]},
+				"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[0,2,1]]}
+			}`)
+			return
 		}
-		_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"],["GAZP",""]]}}`)
+		_, _ = io.WriteString(w, `{
+			"securities": {"columns":["SECID","SHORTNAME"],"data":[["GAZP","Газпром"]]},
+			"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[1,2,1]]}
+		}`)
 	})
 
-	instruments, err := NewStockAdapter(client).ListStocks(context.Background())
+	securities, err := NewStockLister(client).List(context.Background())
 	if err != nil {
-		t.Fatalf("ListStocks: %v", err)
+		t.Fatalf("List: %v", err)
 	}
-	want := []service.Instrument{
-		{ID: "SBER", Ticker: "SBER", Name: "Сбербанк"},
-		{ID: "GAZP", Ticker: "GAZP", Name: "GAZP"},
+	if path != "/iss/engines/stock/markets/shares/boards/TQBR/securities.json" {
+		t.Errorf("path = %q", path)
 	}
-	if len(instruments) != len(want) {
-		t.Fatalf("instruments = %+v, want %+v", instruments, want)
+	if got := join(starts); got != "0,1" {
+		t.Errorf("starts = %q, want %q", got, "0,1")
 	}
-	for i := range want {
-		if instruments[i] != want[i] {
-			t.Errorf("instrument %d = %+v, want %+v", i, instruments[i], want[i])
-		}
-	}
-}
-
-func TestMapSecuritiesSkipsEmptySecIDAndUsesSecIDForEmptyName(t *testing.T) {
-	instruments := mapSecurities([]Security{
+	want := []Security{
 		{SecID: "SBER", ShortName: "Сбербанк"},
-		{SecID: ""},
-		{SecID: "GAZP", ShortName: ""},
-	})
-	want := []service.Instrument{
-		{ID: "SBER", Ticker: "SBER", Name: "Сбербанк"},
-		{ID: "GAZP", Ticker: "GAZP", Name: "GAZP"},
+		{SecID: "GAZP", ShortName: "Газпром"},
 	}
-	if len(instruments) != len(want) {
-		t.Fatalf("instruments = %+v, want %+v", instruments, want)
+	if len(securities) != len(want) {
+		t.Fatalf("securities = %+v, want %+v", securities, want)
 	}
 	for i := range want {
-		if instruments[i] != want[i] {
-			t.Errorf("instrument %d = %+v, want %+v", i, instruments[i], want[i])
+		if securities[i] != want[i] {
+			t.Errorf("security %d = %+v, want %+v", i, securities[i], want[i])
 		}
 	}
 }
 
-func TestStockAdapterListStocksEmptyResponseIsNonNil(t *testing.T) {
-	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
-	})
-
-	instruments, err := NewStockAdapter(client).ListStocks(context.Background())
-	if err != nil {
-		t.Fatalf("ListStocks: %v", err)
-	}
-	if instruments == nil {
-		t.Fatal("instruments is nil, want an empty slice")
-	}
-	if len(instruments) != 0 {
-		t.Fatalf("len(instruments) = %d, want 0", len(instruments))
-	}
-}
-
-func TestStockAdapterListStocksMapsClientErrors(t *testing.T) {
+func TestStockListerListReturnsClientErrors(t *testing.T) {
 	tests := []struct {
 		name      string
 		client    func(t *testing.T) *Client
@@ -111,83 +87,37 @@ func TestStockAdapterListStocksMapsClientErrors(t *testing.T) {
 			},
 			wantCause: ErrParse,
 		},
+		{
+			name: "timeout",
+			client: func(t *testing.T) *Client {
+				return newClient(t, func(w http.ResponseWriter, r *http.Request) {
+					time.Sleep(100 * time.Millisecond)
+					_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
+				}, WithTimeout(20*time.Millisecond))
+			},
+			wantCause: ErrNetwork,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewStockAdapter(tt.client(t)).ListStocks(context.Background())
-			if !errors.Is(err, service.ErrSourceUnavailable) {
-				t.Fatalf("err = %v, want ErrSourceUnavailable", err)
+			_, err := NewStockLister(tt.client(t)).List(context.Background())
+			if err == nil {
+				t.Fatal("List returned nil error")
 			}
 			if !errors.Is(err, tt.wantCause) {
-				t.Fatalf("err = %v, want underlying cause %v", err, tt.wantCause)
+				t.Errorf("err = %v, want cause %v", err, tt.wantCause)
+			}
+			if tt.name == "timeout" && !errors.Is(err, context.DeadlineExceeded) {
+				t.Errorf("timeout error = %v, want context.DeadlineExceeded", err)
 			}
 		})
 	}
 }
 
-func TestStockAdapterListStocksMapsClientTimeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-		_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
-	}))
-	defer server.Close()
-
-	client := New(server.URL, WithTimeout(20*time.Millisecond))
-	_, err := NewStockAdapter(client).ListStocks(context.Background())
-	if !errors.Is(err, service.ErrSourceUnavailable) {
-		t.Fatalf("err = %v, want ErrSourceUnavailable", err)
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v, want to preserve internal timeout cause", err)
-	}
-	if !errors.Is(err, ErrNetwork) {
-		t.Fatalf("err = %v, want to preserve ErrNetwork cause", err)
-	}
-}
-
-func TestStockAdapterListStocksDoesNotLogContextCancellation(t *testing.T) {
-	var logs strings.Builder
-	previousLogger := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	defer slog.SetDefault(previousLogger)
-
-	started := make(chan struct{})
-	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
-		close(started)
-		<-r.Context().Done()
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := NewStockAdapter(client).ListStocks(ctx)
-		errCh <- err
-	}()
-	<-started
-	cancel()
-
-	err := <-errCh
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled", err)
-	}
-	if errors.Is(err, service.ErrSourceUnavailable) {
-		t.Fatalf("err = %v, cancellation should remain distinguishable in adapter", err)
-	}
-	if logs.Len() != 0 {
-		t.Fatalf("unexpected logs for context cancellation: %s", logs.String())
-	}
-}
-
-func TestStockAdapterListStocksDoesNotMapDeadlineExceeded(t *testing.T) {
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
-	defer cancel()
-
-	_, err := NewStockAdapter(New("")).ListStocks(ctx)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
-	}
-	if errors.Is(err, service.ErrSourceUnavailable) {
-		t.Fatalf("err = %v, deadline should remain distinguishable in adapter", err)
+func TestStockListerListNilClient(t *testing.T) {
+	_, err := NewStockLister(nil).List(context.Background())
+	if !errors.Is(err, ErrRequest) {
+		t.Fatalf("err = %v, want ErrRequest", err)
 	}
 }
