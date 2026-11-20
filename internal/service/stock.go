@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -65,6 +66,8 @@ func (s *moexStockSource) ListStocks(ctx context.Context) ([]Instrument, error) 
 // ErrSourceUnavailable indicates that the external data source is temporarily unavailable.
 var ErrSourceUnavailable = errors.New("market data source is temporarily unavailable")
 
+const stockSourceLoadTimeout = 30 * time.Second
+
 // Page is the paginated result of a search request.
 type Page struct {
 	Items []Instrument
@@ -76,9 +79,17 @@ type Catalog struct {
 	source    StockSource
 	ttl       time.Duration
 	cache     []Instrument
+	loaded    bool
 	expiresAt time.Time
-	mu        sync.RWMutex
+	inflight  *stockLoad
+	mu        sync.Mutex
 	now       func() time.Time
+}
+
+type stockLoad struct {
+	done  chan struct{}
+	items []Instrument
+	err   error
 }
 
 // NewCatalog creates a new Catalog with given source and TTL.
@@ -92,7 +103,7 @@ func NewCatalog(source StockSource, ttl time.Duration) *Catalog {
 
 // Search performs a search across the catalog with pagination.
 func (c *Catalog) Search(ctx context.Context, query string, limit, offset int) (Page, error) {
-	items, err := c.listStocksLocked(ctx)
+	items, err := c.listStocks(ctx)
 	if err != nil {
 		return Page{}, err
 	}
@@ -111,30 +122,84 @@ func (c *Catalog) Search(ctx context.Context, query string, limit, offset int) (
 	return page, nil
 }
 
-func (c *Catalog) listStocksLocked(ctx context.Context) ([]Instrument, error) {
-	c.mu.RLock()
-	if len(c.cache) > 0 && !c.expiresAt.IsZero() && c.expiresAt.After(c.now()) {
-		items := make([]Instrument, len(c.cache))
-		copy(items, c.cache)
-		c.mu.RUnlock()
-		return items, nil
+func (c *Catalog) listStocks(ctx context.Context) ([]Instrument, error) {
+	if ctx == nil {
+		return nil, errors.New("nil context")
 	}
-	c.mu.RUnlock()
-
-	raw, err := c.source.ListStocks(ctx)
-	if err != nil {
-		return nil, ErrSourceUnavailable
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if len(c.cache) == 0 || c.expiresAt.Before(c.now()) {
-		c.cache = raw
-		c.expiresAt = c.now().Add(c.ttl)
+	if err := ctx.Err(); err != nil {
+		c.mu.Unlock()
+		return nil, err
 	}
-	result := make([]Instrument, len(c.cache))
-	copy(result, c.cache)
-	return result, nil
+	now := c.now()
+	if c.loaded && now.Before(c.expiresAt) {
+		items := cloneInstruments(c.cache)
+		c.mu.Unlock()
+		return items, nil
+	}
+
+	if load := c.inflight; load != nil {
+		c.mu.Unlock()
+		return waitForStockLoad(ctx, load)
+	}
+
+	load := &stockLoad{done: make(chan struct{})}
+	c.inflight = load
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stockSourceLoadTimeout)
+	go c.loadStocks(loadCtx, cancel, load)
+	c.mu.Unlock()
+	return waitForStockLoad(ctx, load)
+}
+
+func waitForStockLoad(ctx context.Context, load *stockLoad) ([]Instrument, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-load.done:
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if load.err != nil {
+		return nil, load.err
+	}
+	return cloneInstruments(load.items), nil
+}
+
+func (c *Catalog) loadStocks(ctx context.Context, cancel context.CancelFunc, load *stockLoad) {
+	defer cancel()
+
+	items, err := c.source.ListStocks(ctx)
+	if err != nil {
+		err = fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+	}
+
+	c.mu.Lock()
+	if err == nil {
+		now := c.now()
+		if !c.loaded || !now.Before(c.expiresAt) {
+			c.cache = cloneInstruments(items)
+			c.loaded = true
+			c.expiresAt = now.Add(c.ttl)
+		}
+		load.items = cloneInstruments(c.cache)
+	}
+	load.err = err
+	if c.inflight == load {
+		c.inflight = nil
+	}
+	close(load.done)
+	c.mu.Unlock()
+}
+
+func cloneInstruments(items []Instrument) []Instrument {
+	cloned := make([]Instrument, len(items))
+	copy(cloned, items)
+	return cloned
 }
 
 func filterByQuery(query string, items []Instrument) []Instrument {
