@@ -14,7 +14,7 @@ import (
 
 // Instrument represents a stock instrument with stable identifier, ticker and display name.
 type Instrument struct {
-	ID     string `json:"id"`     // stable identifier (ISIN)
+	ID     string `json:"id"`     // current identifier is MOEX SECID; the client does not provide ISIN
 	Ticker string `json:"ticker"` // exchange code (SECID), e.g. SBER
 	Name   string `json:"name"`   // display name (SHORTNAME)
 }

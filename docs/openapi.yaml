@@ -17,14 +17,14 @@ paths:
       summary: Каталог и поиск акций MOEX
       description: >
         Возвращает постраничный список акций MOEX (режим торгов TQBR).
-        Поиск идёт по тикеру и названию без учёта регистра. Без параметра q
-        возвращается весь каталог, отсортированный по тикеру.
+        Поиск идёт по тикеру и названию без учёта регистра. Если параметр q
+        отсутствует или пуст, возвращается весь каталог, отсортированный по тикеру.
       operationId: listInstruments
       parameters:
         - name: q
           in: query
           required: false
-          description: Строка поиска по тикеру или названию, не длиннее 100 символов.
+          description: Строка поиска по тикеру или названию, не длиннее 100 рун; более длинное значение даёт 400.
           schema:
             type: string
             maxLength: 100
@@ -32,7 +32,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Размер страницы. Значения больше 100 ограничиваются до 100.
+          description: Размер страницы (по умолчанию 50). Нецелое значение или значение меньше 1 даёт 400; больше 100 ограничивается до 100.
           schema:
             type: integer
             minimum: 1
@@ -40,7 +40,7 @@ paths:
         - name: offset
           in: query
           required: false
-          description: Сколько записей пропустить с начала списка.
+          description: Сколько записей пропустить (по умолчанию 0). Нецелое или отрицательное значение даёт 400.
           schema:
             type: integer
             minimum: 0
@@ -68,6 +68,13 @@ paths:
                 $ref: "#/components/schemas/Error"
               example:
                 error: invalid limit parameter
+        "405":
+          description: Метод не разрешён. Зарегистрированный HTTP mux возвращает текстовый ответ.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Method Not Allowed\n"
         "500":
           description: Непредвиденная ошибка сервера.
           content:
@@ -77,13 +84,21 @@ paths:
               example:
                 error: internal server error
         "503":
-          description: Источник данных (MOEX) временно недоступен.
+          description: Источник данных (MOEX) временно недоступен или биржа отвечает слишком медленно.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
               example:
                 error: market data source is temporarily unavailable, please try again later
+        "504":
+          description: Истёк дедлайн обработки запроса.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: request timed out, please try again later
 
   /api/v1/health:
     get:
@@ -280,7 +295,7 @@ components:
       properties:
         id:
           type: string
-          description: Идентификатор инструмента (сейчас совпадает с тикером SECID).
+          description: Сейчас равен тикеру SECID; клиент MOEX не предоставляет ISIN.
           example: SBER
         ticker:
           type: string
