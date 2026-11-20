@@ -84,6 +84,13 @@ func InstrumentsHandler(searcher InstrumentSearcher) http.HandlerFunc {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "market data source is temporarily unavailable, please try again later"})
 				return
 			}
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "request timed out, please try again later"})
+				return
+			}
 			slog.Error("internal server error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return

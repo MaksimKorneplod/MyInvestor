@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +23,17 @@ type mockSearcher struct {
 
 func (m *mockSearcher) Search(ctx context.Context, query string, limit, offset int) (service.Page, error) {
 	return m.page, m.err
+}
+
+func captureHandlerLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	previous := slog.Default()
+	var logs bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+	return &logs
 }
 
 func TestInstrumentsHandlerMethodNotAllowed(t *testing.T) {
@@ -187,6 +201,71 @@ func TestInstrumentsHandlerServiceUnavailable(t *testing.T) {
 	}
 	if strings.Contains(errResp.Error, "down") || strings.Contains(errResp.Error, "internal") {
 		t.Error("internal error details should not leak")
+	}
+}
+
+func TestInstrumentsHandlerSourceUnavailableWinsOverDeadline(t *testing.T) {
+	searcher := &mockSearcher{err: fmt.Errorf("%w: %w", service.ErrSourceUnavailable, context.DeadlineExceeded)}
+	handler := InstrumentsHandler(searcher)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instruments", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if errResp.Error != "market data source is temporarily unavailable, please try again later" {
+		t.Errorf("error = %q, want generic source unavailable message", errResp.Error)
+	}
+}
+
+func TestInstrumentsHandlerCanceledDoesNotRespondOrLog(t *testing.T) {
+	logs := captureHandlerLogs(t)
+	searcher := &mockSearcher{err: context.Canceled}
+	handler := InstrumentsHandler(searcher)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instruments", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Body.Len() != 0 {
+		t.Errorf("response body = %q, want empty", w.Body.String())
+	}
+	if logs.Len() != 0 {
+		t.Errorf("logs = %q, want no log entries", logs.String())
+	}
+}
+
+func TestInstrumentsHandlerDeadlineExceededReturns504WithoutLog(t *testing.T) {
+	logs := captureHandlerLogs(t)
+	searcher := &mockSearcher{err: context.DeadlineExceeded}
+	handler := InstrumentsHandler(searcher)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instruments", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusGatewayTimeout {
+		t.Fatalf("expected 504, got %d", w.Code)
+	}
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if errResp.Error != "request timed out, please try again later" {
+		t.Errorf("error = %q, want generic timeout message", errResp.Error)
+	}
+	if logs.Len() != 0 {
+		t.Errorf("logs = %q, want no log entries", logs.String())
 	}
 }
 
