@@ -76,14 +76,15 @@ type Page struct {
 
 // Catalog caches a list of instruments returned by source for ttl duration.
 type Catalog struct {
-	source    StockSource
-	ttl       time.Duration
-	cache     []Instrument
-	loaded    bool
-	expiresAt time.Time
-	inflight  *stockLoad
-	mu        sync.Mutex
-	now       func() time.Time
+	source      StockSource
+	ttl         time.Duration
+	loadTimeout time.Duration
+	cache       []Instrument
+	loaded      bool
+	expiresAt   time.Time
+	inflight    *stockLoad
+	mu          sync.Mutex
+	now         func() time.Time
 }
 
 type stockLoad struct {
@@ -95,9 +96,10 @@ type stockLoad struct {
 // NewCatalog creates a new Catalog with given source and TTL.
 func NewCatalog(source StockSource, ttl time.Duration) *Catalog {
 	return &Catalog{
-		source: source,
-		ttl:    ttl,
-		now:    time.Now,
+		source:      source,
+		ttl:         ttl,
+		loadTimeout: stockSourceLoadTimeout,
+		now:         time.Now,
 	}
 }
 
@@ -149,7 +151,7 @@ func (c *Catalog) listStocks(ctx context.Context) ([]Instrument, error) {
 
 	load := &stockLoad{done: make(chan struct{})}
 	c.inflight = load
-	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stockSourceLoadTimeout)
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.loadTimeout)
 	go c.loadStocks(loadCtx, cancel, load)
 	c.mu.Unlock()
 	return waitForStockLoad(ctx, load)

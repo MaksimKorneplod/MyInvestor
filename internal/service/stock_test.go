@@ -48,6 +48,26 @@ func (m *mockSource) calls() int {
 	return m.callCount
 }
 
+type blockingSource struct {
+	mu        sync.Mutex
+	callCount int
+}
+
+func (s *blockingSource) ListStocks(ctx context.Context) ([]Instrument, error) {
+	s.mu.Lock()
+	s.callCount++
+	s.mu.Unlock()
+
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (s *blockingSource) calls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.callCount
+}
+
 func stockList() []Instrument {
 	return []Instrument{
 		{ID: "TEST-ID-1", Ticker: "SBER", Name: "Сбербанк"},
@@ -242,6 +262,31 @@ func TestSourceErrorNotCached(t *testing.T) {
 	}
 	if ms.calls() != 2 {
 		t.Errorf("expected source called twice, got %d", ms.calls())
+	}
+}
+
+func TestCatalogLoadTimeoutIsSourceUnavailableAndNotCached(t *testing.T) {
+	source := &blockingSource{}
+	catalog := NewCatalog(source, 30*time.Minute)
+	catalog.loadTimeout = 20 * time.Millisecond
+
+	_, err := catalog.Search(context.Background(), "", 10, 0)
+	if !errors.Is(err, ErrSourceUnavailable) {
+		t.Fatalf("error = %v, want ErrSourceUnavailable", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want context.DeadlineExceeded cause", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, must not be context.Canceled", err)
+	}
+
+	_, err = catalog.Search(context.Background(), "", 10, 0)
+	if !errors.Is(err, ErrSourceUnavailable) {
+		t.Fatalf("second Search error = %v, want ErrSourceUnavailable", err)
+	}
+	if got := source.calls(); got != 2 {
+		t.Fatalf("source calls = %d, want 2 because failed load is not cached", got)
 	}
 }
 
