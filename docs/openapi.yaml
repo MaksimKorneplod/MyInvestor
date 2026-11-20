@@ -10,6 +10,81 @@ servers:
   - url: http://localhost:8080
     description: Local development
 paths:
+  /api/v1/instruments:
+    get:
+      tags:
+        - Instruments
+      summary: Каталог и поиск акций MOEX
+      description: >
+        Возвращает постраничный список акций MOEX (режим торгов TQBR).
+        Поиск идёт по тикеру и названию без учёта регистра. Без параметра q
+        возвращается весь каталог, отсортированный по тикеру.
+      operationId: listInstruments
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Строка поиска по тикеру или названию, не длиннее 100 символов.
+          schema:
+            type: string
+            maxLength: 100
+          example: сбер
+        - name: limit
+          in: query
+          required: false
+          description: Размер страницы. Значения больше 100 ограничиваются до 100.
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Сколько записей пропустить с начала списка.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Страница каталога. Если совпадений нет, items пустой массив.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstrumentPage"
+              example:
+                items:
+                  - id: SBER
+                    ticker: SBER
+                    name: Сбербанк
+                total: 1
+                limit: 50
+                offset: 0
+        "400":
+          description: Неверный параметр запроса (limit, offset или слишком длинный q).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid limit parameter
+        "500":
+          description: Непредвиденная ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: internal server error
+        "503":
+          description: Источник данных (MOEX) временно недоступен.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: market data source is temporarily unavailable, please try again later
+
   /api/v1/health:
     get:
       operationId: getHealth
@@ -199,6 +274,42 @@ components:
         `Authorization: Bearer <token>`. Tokens expire after 24 hours.
         A successful logout revokes the token.
   schemas:
+    Instrument:
+      type: object
+      required: [id, ticker, name]
+      properties:
+        id:
+          type: string
+          description: Идентификатор инструмента (сейчас совпадает с тикером SECID).
+          example: SBER
+        ticker:
+          type: string
+          description: Биржевой код.
+          example: SBER
+        name:
+          type: string
+          description: Отображаемое (краткое) название.
+          example: Сбербанк
+    InstrumentPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Instrument"
+        total:
+          type: integer
+          description: Всего совпадений до применения limit и offset.
+          example: 1
+        limit:
+          type: integer
+          description: Фактически применённый размер страницы.
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
     SchoolRegistrationError:
       type: object
       required: [error]
