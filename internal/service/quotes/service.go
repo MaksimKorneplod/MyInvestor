@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	defaultTTL        = 3 * time.Second
-	maxTickers        = 200
-	parallelThreshold = 5
+	defaultTTL         = 3 * time.Second
+	maxTickers         = 200
+	defaultExecTimeout = 10 * time.Second //таймаут для фонового запроса
+	parallelThreshold  = 5
 )
 
 // QuoteFetcher — узкий интерфейс к repository. *moex.Client ему удовлетворяет.
@@ -21,20 +22,20 @@ type QuoteFetcher interface {
 }
 
 type Service struct {
-	client QuoteFetcher
-	cache  *cache
-	group  singleflight.Group
+	client      QuoteFetcher
+	cache       *cache
+	group       singleflight.Group
+	execTimeout time.Duration //храним таймаут
 }
 
 func New(client QuoteFetcher, ttl time.Duration) *Service {
 	if ttl <= 0 {
 		ttl = defaultTTL
 	}
-	return &Service{client: client, cache: newCache(ttl)}
+	return &Service{client: client, cache: newCache(ttl), execTimeout: defaultExecTimeout}
 }
 
 // One — одна бумага. Узкий кэш-ключ, точная свежесть.
-// (nil, nil) — бумаги нет в выдаче ISS, это не ошибка.
 func (s *Service) One(ctx context.Context, ref moex.Instrument) (*moex.Quote, error) {
 	if err := ident("security", ref.Security); err != nil {
 		return nil, err
@@ -43,18 +44,31 @@ func (s *Service) One(ctx context.Context, ref moex.Instrument) (*moex.Quote, er
 	if rows, ok := s.cache.get(key); ok {
 		return pick(rows, ref.Security), nil
 	}
-	v, err, _ := s.group.Do(key, func() (any, error) {
-		rows, err := s.client.Quotes(ctx, ref)
+
+	// ИСПОЛЬЗУЕМ DoChan вместо Do
+	ch := s.group.DoChan(key, func() (any, error) {
+		execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.execTimeout)
+		defer cancel()
+
+		rows, err := s.client.Quotes(execCtx, ref)
 		if err != nil {
 			return nil, err
 		}
 		s.cache.put(key, rows)
 		return rows, nil
 	})
-	if err != nil {
-		return nil, err
+
+	// Ждем либо результат, либо отмену контекста текущего вызывающего
+	select {
+	case <-ctx.Done():
+		// Лидер упал с context.Canceled, но фоновый запрос (в ch) продолжает жить
+		return nil, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		return pick(res.Val.([]moex.Quote), ref.Security), nil
 	}
-	return pick(v.([]moex.Quote), ref.Security), nil
 }
 
 // Market — снимок рынка/режима. ref.Security должен быть пустым.
@@ -66,8 +80,12 @@ func (s *Service) Market(ctx context.Context, ref moex.Instrument) ([]moex.Quote
 	if rows, ok := s.cache.get(key); ok {
 		return rows, nil
 	}
-	v, err, _ := s.group.Do(key, func() (any, error) {
-		rows, err := s.client.Quotes(ctx, ref)
+
+	ch := s.group.DoChan(key, func() (any, error) {
+		execCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.execTimeout)
+		defer cancel()
+
+		rows, err := s.client.Quotes(execCtx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -77,12 +95,17 @@ func (s *Service) Market(ctx context.Context, ref moex.Instrument) ([]moex.Quote
 		s.cache.put(key, rows)
 		return rows, nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return v.([]moex.Quote), nil
-}
 
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		return res.Val.([]moex.Quote), nil
+	}
+}
 func pick(rows []moex.Quote, secid string) *moex.Quote {
 	for i := range rows {
 		if rows[i].SecID == secid {

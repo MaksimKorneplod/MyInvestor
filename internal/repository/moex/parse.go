@@ -130,7 +130,7 @@ func cellDecimal(raw json.RawMessage) (Decimal, bool, error) {
 	if _, err := number.Float64(); err != nil {
 		return Decimal{}, false, &ParseError{Reason: "number cell"}
 	}
-	return Decimal{text: number.String()}, true, nil
+	return Decimal{Text: number.String()}, true, nil
 }
 func cellTime(raw json.RawMessage, timeGetted time.Time) (time.Time, bool, error) {
 	if isNull(raw) {
@@ -156,7 +156,7 @@ func cellInt(raw json.RawMessage) (int, error) {
 		return 0, &ParseError{Reason: "cursor"}
 	}
 	// Курсор — целое. 2.5 нельзя молча обрезать до 2: это битый ответ.
-	value, err := strconv.Atoi(number.text)
+	value, err := strconv.Atoi(number.Text)
 	if err != nil {
 		return 0, &ParseError{Reason: "cursor"}
 	}

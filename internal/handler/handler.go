@@ -7,7 +7,7 @@
 //  4. Маппинг ошибок service → HTTP-код.
 //
 // Ничего не знает про MOEX ISS, кэш, singleflight и стратегии.
-package quotes
+package handler
 
 import (
 	"context"
@@ -33,12 +33,12 @@ func New(svc Service) *Handler { return &Handler{svc: svc} }
 
 // Register навешивает маршруты (Go 1.22+ patterns).
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/quotes", h.handleMarket)
-	mux.HandleFunc("POST /v1/quotes:batch", h.handleBatch)
-	mux.HandleFunc("GET /v1/quotes/{engine}/{market}/{security}", h.handleOne)
+	mux.HandleFunc("GET /api/v1/quotes", h.handleMarket)
+	mux.HandleFunc("POST /api/v1/quotes:batch", h.handleBatch)
+	mux.HandleFunc("GET /api/v1/quotes/{engine}/{market}/{security}", h.handleOne)
 }
 
-// handleMarket — GET /v1/quotes?engine=stock&market=shares&board=TQBR
+// handleMarket — GET /api/v1/quotes?engine=stock&market=shares&board=TQBR
 // Снимок рынка/режима: экран котировок и рейтинг.
 func (h *Handler) handleMarket(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -55,7 +55,7 @@ func (h *Handler) handleMarket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toDTOs(rows))
 }
 
-// handleBatch — POST /v1/quotes:batch
+// handleBatch — POST /api/v1/quotes:batch
 // Точный список тикеров: портфель.
 func (h *Handler) handleBatch(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeBatch(w, r)
@@ -80,10 +80,11 @@ func (h *Handler) handleBatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toDTOs(rows))
 }
 
-// handleOne — GET /v1/quotes/{engine}/{market}/{security}
+// handleOne — GET /api/v1/quotes/{engine}/{market}/{security}?board=TQBR
 // Одна бумага.
 func (h *Handler) handleOne(w http.ResponseWriter, r *http.Request) {
-	ref, err := validateInstrument(r.PathValue("engine"), r.PathValue("market"), "")
+	board := r.URL.Query().Get("board")
+	ref, err := validateInstrument(r.PathValue("engine"), r.PathValue("market"), board)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "bad_market", err.Error())
 		return

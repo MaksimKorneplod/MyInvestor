@@ -14,7 +14,9 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/database"
 	"github.com/MaksimKorneplod/MyInvestor/internal/handler"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository"
+	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 	"github.com/MaksimKorneplod/MyInvestor/internal/service"
+	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
 )
 
 func serverStart(server *http.Server) error {
@@ -55,8 +57,12 @@ func main() {
 	mux.HandleFunc("GET /api/v1/health", handler.HealthHandler)
 	mux.HandleFunc("POST /api/v1/schools/register", handler.SchoolRegistration(service.Registration{Store: repository.SchoolStore{Pool: dbPool}}))
 
-	port := cfg.HTTPAddr
+	moexClient := moex.New("")
+	quotesService := quotes.New(moexClient, 3*time.Second)
+	quotesHandler := handler.New(quotesService)
+	quotesHandler.Register(mux)
 
+	port := cfg.HTTPAddr
 	server := &http.Server{
 		Addr:              port,
 		Handler:           mux,

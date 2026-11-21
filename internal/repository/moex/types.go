@@ -55,18 +55,18 @@ type HistoryRow struct {
 
 // Decimal хранит десятичную запись числа так, как её прислал ISS.
 type Decimal struct {
-	text string
+	Text string
 }
 
 // String возвращает исходную запись числа.
-func (d Decimal) String() string { return d.text }
+func (d Decimal) String() string { return d.Text }
 
 // Float64 нужен графику. Для хранения котировки используется String.
 func (d Decimal) Float64() (float64, error) {
-	if d.text == "" {
+	if d.Text == "" {
 		return 0, fmt.Errorf("%w: empty decimal", ErrParse)
 	}
-	return strconv.ParseFloat(d.text, 64)
+	return strconv.ParseFloat(d.Text, 64)
 }
 
 // ChartPeriod повторяет enum графика iOS.

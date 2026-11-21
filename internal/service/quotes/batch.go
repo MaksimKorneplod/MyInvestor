@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var tickerRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
+var tickerRegular = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
 
 // Batch — точный список тикеров.
 //
@@ -135,17 +135,18 @@ func normalizeTickers(tickers []string) ([]string, error) {
 	//проверка на минетик
 	for _, quot := range tickers {
 		quotUpRegister := strings.ToUpper(quot)
-		if quotUpRegister == "" {
+		quotClean := strings.TrimSpace(quotUpRegister)
+		if quotClean == "" {
 			return nil, fmt.Errorf("%w: empty ticker", moex.ErrRequest)
 		}
-		if !tickerRe.MatchString(quotUpRegister) {
+		if !tickerRegular.MatchString(quotClean) {
 			return nil, fmt.Errorf("%w: wrong ticker", moex.ErrRequest)
 		}
-		if _, ok := tickersIn[quotUpRegister]; ok {
+		if _, ok := tickersIn[quotClean]; ok {
 			continue
 		}
-		tickersIn[quotUpRegister] = struct{}{}
-		tickersOut = append(tickersOut, quotUpRegister)
+		tickersIn[quotClean] = struct{}{}
+		tickersOut = append(tickersOut, quotClean)
 	}
 	if len(tickersOut) > maxTickers {
 		return nil, fmt.Errorf("%w: too many tickers in ask (%d)", moex.ErrRequest, len(tickersOut))
@@ -154,7 +155,7 @@ func normalizeTickers(tickers []string) ([]string, error) {
 }
 
 func ident(kind, value string) error {
-	if !tickerRe.MatchString(value) {
+	if !tickerRegular.MatchString(value) {
 		return fmt.Errorf("%w: %s %q", moex.ErrRequest, kind, value)
 	}
 	return nil

@@ -104,6 +104,36 @@ func TestBatch_Strategies(t *testing.T) {
 			}
 		}
 	})
+	t.Run("parallel preserves request order", func(t *testing.T) {
+		// ИСПРАВЛЕНО: Используем byTicker, так как 3 тикера пойдут в параллельный запрос,
+		// а не в bulk (для bulk нужно >5 тикеров).
+		f := &fakeFetcher{byTicker: map[string]moex.Quote{
+			"A": {SecID: "A"}, "B": {SecID: "B"}, "C": {SecID: "C"},
+		}}
+		s := New(f, time.Second)
+
+		// ИСПРАВЛЕНО: Проверяем ошибку (err)
+		got, err := s.Batch(context.Background(),
+			moex.Instrument{Engine: "stock", Market: "shares"},
+			[]string{"C", "A", "B", "C", "A", "B"}) // 6 тикеров, после dedupe 3
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		want := []string{"C", "A", "B"}
+
+		// ИСПРАВЛЕНО: Явно проверяем длину ответа
+		if len(got) != len(want) {
+			t.Fatalf("got %d quotes, want %d", len(got), len(want))
+		}
+
+		// Теперь цикл безопасен, так как мы уверены, что длина совпадает
+		for i, q := range got {
+			if q.SecID != want[i] {
+				t.Fatalf("pos %d = %s, want %s", i, q.SecID, want[i])
+			}
+		}
+	})
 }
 
 func TestBatch_DedupeBeforeLimit(t *testing.T) {
@@ -172,5 +202,65 @@ func TestBatch_BadTickerRejected(t *testing.T) {
 		if !errors.Is(err, moex.ErrRequest) {
 			t.Fatalf("%q should fail: %v", bad, err)
 		}
+	}
+}
+
+// НОВОЕ: Мок для проверки singleflight, который умеет блокироваться по команде
+type blockingFetcher struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingFetcher) Quotes(ctx context.Context, _ moex.Instrument) ([]moex.Quote, error) {
+	close(b.started)
+	select {
+	case <-b.release:
+		price := moex.Decimal{Text: "250.0"}                    // Создаем переменную нужного типа
+		return []moex.Quote{{SecID: "SBER", Last: &price}}, nil // Передаем указатель на неё (&price)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// НОВОЕ: Тест на отмену лидера в singleflight
+func TestService_Singleflight_LeaderCancellation(t *testing.T) {
+	f := &blockingFetcher{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	s := New(f, time.Second)
+	ref := moex.Instrument{Engine: "stock", Market: "shares", Security: "SBER"}
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	defer cancelLeader()
+
+	leaderDone := make(chan error)
+	go func() {
+		_, err := s.One(leaderCtx, ref)
+		leaderDone <- err
+	}()
+
+	<-f.started // Ждем, пока лидер начнет запрос
+
+	followerDone := make(chan error)
+	go func() {
+		_, err := s.One(context.Background(), ref)
+		followerDone <- err
+	}()
+
+	time.Sleep(10 * time.Millisecond) // Даем догоняющему время встать в очередь singleflight
+
+	cancelLeader() // Отменяем контекст лидера
+
+	// Лидер должен упасть с context.Canceled
+	if err := <-leaderDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected leader to fail with context.Canceled, got: %v", err)
+	}
+
+	close(f.release) // Разрешаем фоновому запросу завершиться
+
+	// Догоняющий должен успешно получить данные, несмотря на отмену лидера
+	if err := <-followerDone; err != nil {
+		t.Fatalf("follower failed: %v", err)
 	}
 }
