@@ -12,6 +12,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 )
@@ -89,7 +90,7 @@ func (h *Handler) handleOne(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_market", err.Error())
 		return
 	}
-	ref.Security = r.PathValue("security")
+	ref.Security = strings.ToUpper(strings.TrimSpace(r.PathValue("security")))
 	if err := validateTicker(ref.Security); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_security", err.Error())
 		return
