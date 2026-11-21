@@ -15,6 +15,14 @@ type instrumentHistory interface {
 	Candles(ctx context.Context, ticker, period string) (service.HistoryPage, error)
 }
 
+// InstrumentHistoryPattern — маршрут свечей на общем ServeMux приложения.
+const InstrumentHistoryPattern = "GET /api/v1/instruments/{ticker}/history"
+
+// MountInstrumentHistory регистрирует свечи на переданном mux.
+func MountInstrumentHistory(mux *http.ServeMux, history instrumentHistory) {
+	mux.HandleFunc(InstrumentHistoryPattern, InstrumentHistory(history))
+}
+
 // InstrumentHistory отдаёт свечи для графика на странице инструмента.
 // Инструмент — тикер каталога, период — day, week, month, halfYear, year или fiveYears.
 func InstrumentHistory(history instrumentHistory) http.HandlerFunc {

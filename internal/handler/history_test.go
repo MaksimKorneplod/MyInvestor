@@ -41,8 +41,7 @@ func TestInstrumentHistory(t *testing.T) {
 			Close: "300.8",
 		}},
 	}}
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/instruments/{ticker}/history", InstrumentHistory(stub))
+	mux := newAPIMux(stub)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instruments/SBER/history?period=day", nil)
@@ -72,9 +71,8 @@ func TestInstrumentHistory(t *testing.T) {
 
 func TestInstrumentHistoryEmpty(t *testing.T) {
 	stub := &historyStub{page: service.HistoryPage{Ticker: "GAZP", Period: service.PeriodYear}}
-	handler := InstrumentHistory(stub)
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/instruments/GAZP/history?period=year", nil))
+	newAPIMux(stub).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/instruments/GAZP/history?period=year", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
@@ -103,9 +101,8 @@ func TestInstrumentHistoryErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := InstrumentHistory(&historyStub{err: tc.err})
 			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/instruments/SBER/history?period=day", nil))
+			newAPIMux(&historyStub{err: tc.err}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/instruments/SBER/history?period=day", nil))
 			if rec.Code != tc.status {
 				t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 			}
@@ -120,4 +117,37 @@ func TestInstrumentHistoryErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInstrumentHistorySharesServeMux(t *testing.T) {
+	mux := newAPIMux(&historyStub{page: service.HistoryPage{
+		Ticker:  "SBER",
+		Period:  service.PeriodDay,
+		Candles: []service.Candle{},
+	}})
+
+	health := httptest.NewRecorder()
+	mux.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/api/v1/health", nil))
+	if health.Code != http.StatusOK {
+		t.Fatalf("health = %d", health.Code)
+	}
+
+	history := httptest.NewRecorder()
+	mux.ServeHTTP(history, httptest.NewRequest(http.MethodGet, "/api/v1/instruments/SBER/history?period=day", nil))
+	if history.Code != http.StatusOK {
+		t.Fatalf("history = %d body = %s", history.Code, history.Body.String())
+	}
+
+	missing := httptest.NewRecorder()
+	mux.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/instruments/SBER", nil))
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("missing = %d", missing.Code)
+	}
+}
+
+func newAPIMux(history instrumentHistory) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/health", HealthHandler)
+	MountInstrumentHistory(mux, history)
+	return mux
 }

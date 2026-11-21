@@ -113,6 +113,75 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/v1/instruments/{ticker}/history:
+    get:
+      operationId: getInstrumentHistory
+      summary: Get historical candles for an instrument chart
+      description: |
+        Returns OHLC candles for one catalog instrument and a chart period.
+        The ticker is the SECID from the instrument catalog.
+        Prices are decimal strings as received from MOEX. High and low are
+        omitted when the source cell is null. An empty candle list is a
+        successful response.
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: Instrument ticker (SECID), for example SBER.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 32
+            pattern: '^[A-Za-z0-9._-]+$'
+          example: SBER
+        - name: period
+          in: query
+          required: true
+          description: Chart period. halfYear is six months.
+          schema:
+            type: string
+            enum: [day, week, month, halfYear, year, fiveYears]
+          example: month
+      responses:
+        '200':
+          description: Candles for the requested instrument and period.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstrumentHistory'
+              example:
+                ticker: SBER
+                period: day
+                candles:
+                  - begin: "2026-03-01T09:30:00+03:00"
+                    open: "300.5"
+                    high: "301"
+                    low: "299"
+                    close: "300.8"
+        '400':
+          description: The period is not supported or the instrument ticker is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                period:
+                  value:
+                    error: unsupported period
+                instrument:
+                  value:
+                    error: invalid instrument
+        '503':
+          description: MOEX did not return candles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: market data source is temporarily unavailable, please try again later
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/v1/schools/register:
     post:
       operationId: registerSchool
@@ -316,6 +385,44 @@ components:
           type: string
           description: Human-readable error message.
           example: Invalid input data.
+    Candle:
+      type: object
+      required: [begin, open, close]
+      properties:
+        begin:
+          type: string
+          format: date-time
+          description: Candle timestamp.
+        open:
+          type: string
+          description: Open price as a decimal string.
+          example: "300.5"
+        high:
+          type: string
+          description: High price. Omitted when MOEX sends null.
+          example: "301"
+        low:
+          type: string
+          description: Low price. Omitted when MOEX sends null.
+          example: "299"
+        close:
+          type: string
+          description: Close price as a decimal string.
+          example: "300.8"
+    InstrumentHistory:
+      type: object
+      required: [ticker, period, candles]
+      properties:
+        ticker:
+          type: string
+          example: SBER
+        period:
+          type: string
+          enum: [day, week, month, halfYear, year, fiveYears]
+        candles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candle'
   responses:
     BadRequest:
       description: The request body is malformed or contains invalid fields.
