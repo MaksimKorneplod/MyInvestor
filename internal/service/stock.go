@@ -14,7 +14,7 @@ import (
 
 // Instrument represents a stock instrument with stable identifier, ticker and display name.
 type Instrument struct {
-	ID     string `json:"id"`     // current identifier is MOEX SECID; the client does not provide ISIN
+	ID     string `json:"id"`     // ID is the ISIN reported by MOEX.
 	Ticker string `json:"ticker"` // exchange code (SECID), e.g. SBER
 	Name   string `json:"name"`   // display name (SHORTNAME)
 }
@@ -47,7 +47,7 @@ func (s *moexStockSource) ListStocks(ctx context.Context) ([]Instrument, error) 
 
 	instruments := make([]Instrument, 0, len(securities))
 	for _, security := range securities {
-		if security.SecID == "" {
+		if security.SecID == "" || security.ISIN == "" {
 			continue
 		}
 		name := security.ShortName
@@ -55,7 +55,7 @@ func (s *moexStockSource) ListStocks(ctx context.Context) ([]Instrument, error) 
 			name = security.SecID
 		}
 		instruments = append(instruments, Instrument{
-			ID:     security.SecID,
+			ID:     security.ISIN,
 			Ticker: security.SecID,
 			Name:   name,
 		})

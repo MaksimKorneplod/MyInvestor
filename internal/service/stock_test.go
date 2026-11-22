@@ -70,10 +70,10 @@ func (s *blockingSource) calls() int {
 
 func stockList() []Instrument {
 	return []Instrument{
-		{ID: "TEST-ID-1", Ticker: "SBER", Name: "Сбербанк"},
-		{ID: "TEST-ID-2", Ticker: "SBERP", Name: "Сбербанк-п"},
-		{ID: "TEST-ID-3", Ticker: "GAZP", Name: "Газпром"},
-		{ID: "TEST-ID-4", Ticker: "LKOH", Name: "ЛУКОЙЛ"},
+		{ID: "ZZ1234567890", Ticker: "SBER", Name: "Сбербанк"},
+		{ID: "ZZ0987654321", Ticker: "SBERP", Name: "Сбербанк-п"},
+		{ID: "ZZ1111111111", Ticker: "GAZP", Name: "Газпром"},
+		{ID: "ZZ2222222222", Ticker: "LKOH", Name: "ЛУКОЙЛ"},
 	}
 }
 
@@ -89,9 +89,10 @@ func (m mockMOEXLister) List(context.Context) ([]moex.Security, error) {
 func TestMOEXStockSourceMapsSecurities(t *testing.T) {
 	source := NewMOEXStockSource(mockMOEXLister{
 		securities: []moex.Security{
-			{SecID: "SBER", ShortName: "Сбербанк"},
-			{SecID: ""},
-			{SecID: "GAZP"},
+			{SecID: "SBER", ShortName: "Сбербанк", ISIN: "ZZ1234567890"},
+			{SecID: "MISS", ShortName: "Missing ISIN"},
+			{SecID: "", ISIN: "ZZ3333333333"},
+			{SecID: "GAZP", ISIN: "ZZ0987654321"},
 		},
 	})
 
@@ -100,8 +101,8 @@ func TestMOEXStockSourceMapsSecurities(t *testing.T) {
 		t.Fatalf("ListStocks: %v", err)
 	}
 	want := []Instrument{
-		{ID: "SBER", Ticker: "SBER", Name: "Сбербанк"},
-		{ID: "GAZP", Ticker: "GAZP", Name: "GAZP"},
+		{ID: "ZZ1234567890", Ticker: "SBER", Name: "Сбербанк"},
+		{ID: "ZZ0987654321", Ticker: "GAZP", Name: "GAZP"},
 	}
 	if len(instruments) != len(want) {
 		t.Fatalf("instruments = %+v, want %+v", instruments, want)
@@ -110,6 +111,9 @@ func TestMOEXStockSourceMapsSecurities(t *testing.T) {
 		if instruments[i] != want[i] {
 			t.Errorf("instrument %d = %+v, want %+v", i, instruments[i], want[i])
 		}
+	}
+	if instruments[0].ID == instruments[0].Ticker {
+		t.Errorf("ID = %q must be ISIN, not ticker", instruments[0].ID)
 	}
 }
 

@@ -42,8 +42,8 @@ func newInstrumentEndpoint(t *testing.T, timeout time.Duration, issHandler http.
 func writeSecuritiesResponse(w http.ResponseWriter) {
 	_, _ = io.WriteString(w, `{
 		"securities": {
-			"columns": ["SECID", "SHORTNAME"],
-			"data": [["SBER", "Сбербанк"], ["SBERP", "Сбербанк-п"], ["GAZP", "Газпром"]]
+			"columns": ["SECID", "SHORTNAME", "ISIN"],
+			"data": [["SBER", "Сбербанк", "ZZ1234567890"], ["SBERP", "Сбербанк-п", "ZZ0987654321"], ["GAZP", "Газпром", "ZZ1111111111"]]
 		},
 		"securities.cursor": {
 			"columns": ["INDEX", "TOTAL", "PAGESIZE"],
@@ -72,9 +72,9 @@ func TestInstrumentCatalogEndToEnd(t *testing.T) {
 			name:  "all instruments with fields",
 			query: url.Values{},
 			wantItems: []service.Instrument{
-				{ID: "GAZP", Ticker: "GAZP", Name: "Газпром"},
-				{ID: "SBER", Ticker: "SBER", Name: "Сбербанк"},
-				{ID: "SBERP", Ticker: "SBERP", Name: "Сбербанк-п"},
+				{ID: "ZZ1111111111", Ticker: "GAZP", Name: "Газпром"},
+				{ID: "ZZ1234567890", Ticker: "SBER", Name: "Сбербанк"},
+				{ID: "ZZ0987654321", Ticker: "SBERP", Name: "Сбербанк-п"},
 			},
 			wantTotal: 3,
 			wantLimit: 50,
@@ -83,8 +83,8 @@ func TestInstrumentCatalogEndToEnd(t *testing.T) {
 			name:  "case-insensitive Cyrillic search",
 			query: url.Values{"q": []string{"СБеР"}},
 			wantItems: []service.Instrument{
-				{ID: "SBER", Ticker: "SBER", Name: "Сбербанк"},
-				{ID: "SBERP", Ticker: "SBERP", Name: "Сбербанк-п"},
+				{ID: "ZZ1234567890", Ticker: "SBER", Name: "Сбербанк"},
+				{ID: "ZZ0987654321", Ticker: "SBERP", Name: "Сбербанк-п"},
 			},
 			wantTotal: 2,
 			wantLimit: 50,
@@ -93,7 +93,7 @@ func TestInstrumentCatalogEndToEnd(t *testing.T) {
 			name:  "limit and offset",
 			query: url.Values{"limit": []string{"1"}, "offset": []string{"1"}},
 			wantItems: []service.Instrument{
-				{ID: "SBER", Ticker: "SBER", Name: "Сбербанк"},
+				{ID: "ZZ1234567890", Ticker: "SBER", Name: "Сбербанк"},
 			},
 			wantTotal:  3,
 			wantLimit:  1,
