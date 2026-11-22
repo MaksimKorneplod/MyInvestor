@@ -17,6 +17,15 @@ type fakeFetcher struct {
 	fail     map[string]error
 }
 
+type recordingFetcher struct {
+	got moex.Instrument
+}
+
+func (f *recordingFetcher) Quotes(_ context.Context, ref moex.Instrument) ([]moex.Quote, error) {
+	f.got = ref
+	return []moex.Quote{{SecID: ref.Security}}, nil
+}
+
 func (f *fakeFetcher) Quotes(_ context.Context, ref moex.Instrument) ([]moex.Quote, error) {
 	atomic.AddInt32(&f.calls, 1)
 	if ref.Security == "" {
@@ -162,7 +171,7 @@ func TestBatch_TooManyUnique(t *testing.T) {
 	}
 	_, err := s.Batch(context.Background(),
 		moex.Instrument{Engine: "stock", Market: "shares"}, in)
-	if !errors.Is(err, moex.ErrRequest) {
+	if !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -178,7 +187,7 @@ func TestBatch_PartialFailureInParallel(t *testing.T) {
 	_, err := s.Batch(context.Background(),
 		moex.Instrument{Engine: "stock", Market: "shares"},
 		[]string{"SBER", "GAZP", "LKOH"})
-	if !errors.Is(err, moex.ErrNetwork) {
+	if !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -188,7 +197,7 @@ func TestBatch_EmptyRejected(t *testing.T) {
 	s := New(f, time.Second)
 	_, err := s.Batch(context.Background(),
 		moex.Instrument{Engine: "stock", Market: "shares"}, nil)
-	if !errors.Is(err, moex.ErrRequest) {
+	if !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -199,9 +208,21 @@ func TestBatch_BadTickerRejected(t *testing.T) {
 	for _, bad := range []string{"SBER/P", "../etc", "SBER P", ""} {
 		_, err := s.Batch(context.Background(),
 			moex.Instrument{Engine: "stock", Market: "shares"}, []string{bad})
-		if !errors.Is(err, moex.ErrRequest) {
+		if !errors.Is(err, ErrInvalidRequest) {
 			t.Fatalf("%q should fail: %v", bad, err)
 		}
+	}
+}
+
+func TestOne_KeepsMarketPathCase(t *testing.T) {
+	f := &recordingFetcher{}
+	s := New(f, time.Second)
+	_, err := s.One(context.Background(), moex.Instrument{Engine: "stock", Market: "shares", Security: "sber"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.got.Engine != "stock" || f.got.Market != "shares" || f.got.Security != "SBER" {
+		t.Fatalf("ISS path parts = %+v", f.got)
 	}
 }
 

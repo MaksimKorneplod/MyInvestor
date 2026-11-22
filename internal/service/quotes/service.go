@@ -37,10 +37,17 @@ func New(client QuoteFetcher, ttl time.Duration) *Service {
 }
 
 // One — одна бумага. Узкий кэш-ключ, точная свежесть.
+// Engine и market остаются в нижнем регистре: ISS принимает /iss/engines/stock/markets/shares.
 func (s *Service) One(ctx context.Context, ref moex.Instrument) (*moex.Quote, error) {
+	quote, err := s.oneQuote(ctx, ref)
+	if err != nil {
+		return nil, mapSource(err)
+	}
+	return quote, nil
+}
+
+func (s *Service) oneQuote(ctx context.Context, ref moex.Instrument) (*moex.Quote, error) {
 	ref.Security = strings.ToUpper(strings.TrimSpace(ref.Security))
-	ref.Engine = strings.ToUpper(ref.Engine)
-	ref.Market = strings.ToUpper(ref.Market)
 	if err := ident("security", ref.Security); err != nil {
 		return nil, err
 	}
@@ -77,6 +84,14 @@ func (s *Service) One(ctx context.Context, ref moex.Instrument) (*moex.Quote, er
 
 // Market — снимок рынка/режима. ref.Security должен быть пустым.
 func (s *Service) Market(ctx context.Context, ref moex.Instrument) ([]moex.Quote, error) {
+	rows, err := s.market(ctx, ref)
+	if err != nil {
+		return nil, mapSource(err)
+	}
+	return rows, nil
+}
+
+func (s *Service) market(ctx context.Context, ref moex.Instrument) ([]moex.Quote, error) {
 	if ref.Security != "" {
 		return nil, fmt.Errorf("%w: market does not take a security", moex.ErrRequest)
 	}

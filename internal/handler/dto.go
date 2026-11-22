@@ -3,7 +3,7 @@ package handler
 import (
 	"time"
 
-	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
+	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
 )
 
 // BatchRequest — тело POST /v1/quotes:batch.
@@ -26,7 +26,7 @@ type QuoteDTO struct {
 
 // toDTO — домен → DTO. Единственное место, где moex.Quote
 // превращается в то, что видит фронт.
-func toDTO(q moex.Quote) QuoteDTO {
+func toDTO(q quotes.Quote) QuoteDTO {
 	dto := QuoteDTO{
 		Ticker:     q.SecID,
 		ReceivedAt: q.UpdateTime.Format(time.RFC3339),
@@ -46,7 +46,7 @@ func toDTO(q moex.Quote) QuoteDTO {
 	return dto
 }
 
-func toDTOs(rows []moex.Quote) []QuoteDTO {
+func toDTOs(rows []quotes.Quote) []QuoteDTO {
 	if rows == nil {
 		return []QuoteDTO{}
 	}

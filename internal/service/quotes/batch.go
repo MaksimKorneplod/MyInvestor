@@ -24,6 +24,14 @@ var tickerRegular = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
 // во входном списке. Отсутствующие в ISS бумаги просто не попадают
 // в результат — фронт дорисует прочерк.
 func (s *Service) Batch(ctx context.Context, ref moex.Instrument, tickers []string) ([]moex.Quote, error) {
+	rows, err := s.batch(ctx, ref, tickers)
+	if err != nil {
+		return nil, mapSource(err)
+	}
+	return rows, nil
+}
+
+func (s *Service) batch(ctx context.Context, ref moex.Instrument, tickers []string) ([]moex.Quote, error) {
 	uniq, err := normalizeTickers(tickers)
 	if err != nil {
 		return nil, err

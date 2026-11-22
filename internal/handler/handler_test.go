@@ -9,31 +9,31 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
+	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
 )
 
 // --- Мок сервиса ---
 
 type mockService struct {
-	marketQuote []moex.Quote
+	marketQuote []quotes.Quote
 	marketErr   error
 
-	batchQuote []moex.Quote
+	batchQuote []quotes.Quote
 	batchErr   error
 
-	oneQuote *moex.Quote
+	oneQuote *quotes.Quote
 	oneErr   error
 }
 
-func (m *mockService) One(ctx context.Context, ref moex.Instrument) (*moex.Quote, error) {
+func (m *mockService) One(ctx context.Context, ref quotes.Instrument) (*quotes.Quote, error) {
 	return m.oneQuote, m.oneErr
 }
 
-func (m *mockService) Market(ctx context.Context, ref moex.Instrument) ([]moex.Quote, error) {
+func (m *mockService) Market(ctx context.Context, ref quotes.Instrument) ([]quotes.Quote, error) {
 	return m.marketQuote, m.marketErr
 }
 
-func (m *mockService) Batch(ctx context.Context, ref moex.Instrument, tickers []string) ([]moex.Quote, error) {
+func (m *mockService) Batch(ctx context.Context, ref quotes.Instrument, tickers []string) ([]quotes.Quote, error) {
 	return m.batchQuote, m.batchErr
 }
 
@@ -153,7 +153,7 @@ func TestHandleOne_Success(t *testing.T) {
 	// Создаем фейковую бумагу
 	// Внимание: если moex.Decimal - сложный тип, используйте его конструктор.
 	// Здесь я делаю допущение, что он поддерживает конвертацию.
-	q := moex.Quote{
+	q := quotes.Quote{
 		SecID: "SBER",
 	}
 
@@ -202,14 +202,14 @@ func TestWriteMapped_ErrorMapping(t *testing.T) {
 		expectCode int
 		expectErr  string
 	}{
-		{"Bad Request", moex.ErrRequest, http.StatusBadRequest, "bad_request"},
+		{"Bad Request", quotes.ErrInvalidRequest, http.StatusBadRequest, "bad_request"},
 		{"Canceled", context.Canceled, http.StatusServiceUnavailable, "canceled"},
-		{"Timeout", context.DeadlineExceeded, http.StatusGatewayTimeout, "upstream_timeout"},
-		{"Parse Error", moex.ErrParse, http.StatusBadGateway, "upstream_parse"},
-		{"Network Error", moex.ErrNetwork, http.StatusServiceUnavailable, "upstream_unavailable"},
-		{"Status 429", &moex.StatusError{Code: http.StatusTooManyRequests}, http.StatusServiceUnavailable, "rate_limited"},
-		{"Status 404", &moex.StatusError{Code: http.StatusNotFound}, http.StatusNotFound, "not_found"},
-		{"Status 500", &moex.StatusError{Code: http.StatusInternalServerError}, http.StatusBadGateway, "upstream_status"},
+		{"Timeout", quotes.ErrTimeout, http.StatusGatewayTimeout, "upstream_timeout"},
+		{"Parse Error", quotes.ErrBadUpstream, http.StatusBadGateway, "upstream_parse"},
+		{"Network Error", quotes.ErrUnavailable, http.StatusServiceUnavailable, "upstream_unavailable"},
+		{"Status 429", quotes.ErrRateLimited, http.StatusServiceUnavailable, "rate_limited"},
+		{"Status 404", quotes.ErrNotFound, http.StatusNotFound, "not_found"},
+		{"Status 500", &quotes.UpstreamStatusError{Code: http.StatusInternalServerError}, http.StatusBadGateway, "upstream_status"},
 		{"Unknown", errors.New("some random error"), http.StatusInternalServerError, "internal"},
 	}
 

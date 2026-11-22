@@ -20,6 +20,13 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
 )
 
+const (
+	serverWriteTimeout = 15 * time.Second
+	// Один предел на Listed и все страницы свечей. Он короче WriteTimeout,
+	// чтобы сервер успел отдать 503, а не оборвать соединение.
+	instrumentHistoryBudget = 10 * time.Second
+)
+
 func serverStart(server *http.Server) error {
 	slog.Info("Starting server", "addr", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -69,6 +76,7 @@ func main() {
 	}
 	newsClient := rss.NewClient(&http.Client{Timeout: 10 * time.Second}, feedURL)
 	mux.HandleFunc("GET /api/v1/news", handler.NewsHandler(newsClient))
+	handler.MountInstrumentHistory(mux, service.NewHistory(moexClient), instrumentHistoryBudget)
 
 	port := cfg.HTTPAddr
 	server := &http.Server{
@@ -76,7 +84,7 @@ func main() {
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		WriteTimeout:      serverWriteTimeout,
 		IdleTimeout:       60 * time.Second,
 	}
 

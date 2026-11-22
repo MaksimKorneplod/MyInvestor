@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
+	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
 )
 
 const maxBodyBytes = 1 << 16 // 64 KiB — с запасом на 200 тикеров
@@ -31,19 +31,19 @@ var allowedMarkets = map[string]map[string]map[string]struct{}{
 // validateInstrument проверяет engine/market/board по whitelist.
 // Возвращает доменный moex.Instrument без Security — Security
 // проставляет вызывающий handler.
-func validateInstrument(engine, market, board string) (moex.Instrument, error) {
+func validateInstrument(engine, market, board string) (quotes.Instrument, error) {
 	byMarket, ok := allowedMarkets[engine]
 	if !ok {
-		return moex.Instrument{}, fmt.Errorf("engine %q not allowed", engine)
+		return quotes.Instrument{}, fmt.Errorf("engine %q not allowed", engine)
 	}
 	boards, ok := byMarket[market]
 	if !ok {
-		return moex.Instrument{}, fmt.Errorf("market %q not allowed", market)
+		return quotes.Instrument{}, fmt.Errorf("market %q not allowed", market)
 	}
 	if _, ok := boards[board]; !ok {
-		return moex.Instrument{}, fmt.Errorf("board %q not allowed", board)
+		return quotes.Instrument{}, fmt.Errorf("board %q not allowed", board)
 	}
-	return moex.Instrument{Engine: engine, Market: market, Board: board}, nil
+	return quotes.Instrument{Engine: engine, Market: market, Board: board}, nil
 }
 
 func validateTicker(t string) error {

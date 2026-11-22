@@ -1,28 +1,27 @@
-// Package quotes — HTTP-слой котировок.
+// Котировки. HTTP-слой поверх internal/service/quotes.
 //
 // Отвечает только за четыре вещи:
 //  1. HTTP: методы, коды, заголовки, тела.
 //  2. Валидация входа: whitelist engine/market/board, размер тела, JSON.
-//  3. DTO ⇄ домен: moex.Quote → QuoteDTO и обратно.
+//  3. DTO: quotes.Quote → QuoteDTO.
 //  4. Маппинг ошибок service → HTTP-код.
 //
-// Ничего не знает про MOEX ISS, кэш, singleflight и стратегии.
+// Репозиторий MOEX, кэш и singleflight этому пакету не видны.
 package handler
 
 import (
 	"context"
 	"net/http"
 
-	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
+	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
 )
 
-// Service — то, что handler-у нужно от бизнес-слоя.
-// Объявлен здесь, рядом с потребителем (accept interfaces, return structs).
-// *service/quotes.Service ему удовлетворяет.
+// Service — то, что обработчику нужно от бизнес-слоя.
+// *quotes.Service ему удовлетворяет.
 type Service interface {
-	One(ctx context.Context, ref moex.Instrument) (*moex.Quote, error)
-	Market(ctx context.Context, ref moex.Instrument) ([]moex.Quote, error)
-	Batch(ctx context.Context, ref moex.Instrument, tickers []string) ([]moex.Quote, error)
+	One(ctx context.Context, ref quotes.Instrument) (*quotes.Quote, error)
+	Market(ctx context.Context, ref quotes.Instrument) ([]quotes.Quote, error)
+	Batch(ctx context.Context, ref quotes.Instrument, tickers []string) ([]quotes.Quote, error)
 }
 
 type Handler struct {
