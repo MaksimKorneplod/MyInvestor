@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { assetSeries, Donut, LineChart, portfolioSeries, Spark } from './charts'
 import { Bull, Icon, Mark, NewsArt } from './icons'
 import { FEE, TRADERS, allocOf, chgOf, dayPL, fmt0, fmt2, fmtMoney, fmtPct, investedVal, levelOf, myRet, totalVal, unrealPL } from './mock'
-import { findAsset, marketRows, useStudio } from './studio'
+import { findAsset, useStudio } from './studio'
 
 const tiny = { width: 12, height: 12 }
 
@@ -126,13 +126,12 @@ export function PeriodTabs() {
 }
 
 export function Portfolio() {
-  const { model, actions, sectors } = useStudio()
+  const { model, actions } = useStudio()
   const account = model.account
   const tab = account.ptab
   const inv = investedVal(account)
   const upl = unrealPL(account)
   const d = dayPL(account)
-  const rows = marketRows(model)
   return (
     <>
       <div className="pagehead enter"><h1>Портфель</h1><div className="right">
@@ -148,66 +147,13 @@ export function Portfolio() {
       </div>
       <div className="tabs enter" style={{ '--d': '.08s' }}>
         <button className={tab === 'hold' ? 'on' : ''} onClick={() => actions.setPageTab('hold')}>Мои активы</button>
-        <button className={tab === 'market' ? 'on' : ''} onClick={() => actions.setPageTab('market')}>Рынок</button>
+        <button onClick={() => actions.openMarket()}>Рынок</button>
         <button className={tab === 'hist' ? 'on' : ''} onClick={() => actions.setPageTab('hist')}>История · {account.tx.length}</button>
       </div>
       {tab === 'hold' && <Holdings />}
-      {tab === 'market' && (
-        <>
-          <div className="toolbar enter" style={{ '--d': '.1s' }}>
-            <div className="tsearch"><Icon name="search" /><input value={account.mkt.q} placeholder="Поиск: NVIDIA, TSLA…" aria-label="Поиск по рынку" onChange={e => actions.setMarket({ q: e.target.value.trim().toLowerCase() })} /></div>
-            <button className={`chip ${account.mkt.sec === 'all' ? 'on' : ''}`} onClick={() => actions.setMarket({ sec: 'all' })}>Все сектора</button>
-            {Object.entries(sectors).map(([key, sector]) => <button key={key} className={`chip ${account.mkt.sec === key ? 'on' : ''}`} onClick={() => actions.setMarket({ sec: key })}><i style={{ width: 8, height: 8, borderRadius: '50%', background: sector.c }} />{sector.n}</button>)}
-            <select className="sel" aria-label="Сортировка" value={account.mkt.sort} onChange={e => actions.setMarket({ sort: e.target.value })}>
-              <option value="chg">По изменению</option>
-              <option value="price">По цене</option>
-              <option value="name">По имени</option>
-            </select>
-            <button className="chip" onClick={() => actions.toggleDir()}>{account.mkt.dir > 0 ? '↑ по возрастанию' : '↓ по убыванию'}</button>
-          </div>
-          <div className="viewsrow enter" style={{ '--d': '.12s' }}><span className="lbl">Сохранённые виды:</span>
-            {account.views.length ? account.views.map(view => (
-              <span className="viewchip" key={view.id}><button onClick={() => actions.applyView(view.id)} style={{ font: 'inherit', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="eye" style={tiny} />{view.name}</button><button className="vx" aria-label={`Удалить вид ${view.name}`} onClick={() => actions.deleteView(view.id)}><Icon name="x" /></button></span>
-            )) : <span className="lbl">пока нет</span>}
-            <button className="chip" onClick={() => actions.openSaveView()}><Icon name="save" /> Сохранить текущий вид</button>
-          </div>
-          <div className="card tablecard enter" style={{ '--d': '.14s' }}>
-            {model.msel.length > 0 && <div className="bulkbar"><b>Выбрано: {model.msel.length}</b><span className="sp" />
-              <button className="btn btn-up btn-sm" onClick={() => actions.bulkFav('add')}><Icon name="star" /> В избранное</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => actions.bulkFav('del')}><Icon name="x" /> Убрать из избранного</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => actions.clearMsel()}>Снять выделение</button></div>}
-            <div className="tscroll"><table><thead><tr>
-              <th style={{ width: 36 }}><input type="checkbox" className="ck" aria-label="Выбрать все видимые" checked={rows.length > 0 && rows.every(item => model.msel.includes(item.t))} onChange={e => actions.toggleMall(e.target.checked, rows)} /></th>
-              <th>Актив</th><th>Цена</th><th>День</th><th>Тренд</th><th>P/E</th><th style={{ width: 52 }}>★</th></tr></thead>
-            <tbody>
-              {rows.length ? rows.map(asset => {
-                const change = chgOf(asset)
-                return <tr key={asset.t} className={model.msel.includes(asset.t) ? 'selected' : ''} onClick={() => actions.openAsset(asset.t)}>
-                  <td onClick={e => e.stopPropagation()}><input type="checkbox" className="ck" aria-label={`Выбрать ${asset.t}`} checked={model.msel.includes(asset.t)} onChange={e => actions.toggleMsel(asset.t, e.target.checked)} /></td>
-                  <td><div className="tasset"><Mark asset={asset} /><div><div className="n">{asset.n}</div><div className="t">{asset.t} · {sectors[asset.sec]?.n || asset.sec}</div></div></div></td>
-                  <td className="num">{fmt2(asset.p)}</td>
-                  <td className={`num ${change >= 0 ? 'up' : 'down'}`}>{fmtPct(change)}</td>
-                  <td><MiniSpark asset={asset} seed={account.tickSeed} /></td>
-                  <td className="num" style={{ color: 'var(--muted)' }}>{asset.live && !asset.pe ? '—' : Number(asset.pe).toFixed(1)}</td>
-                  <td onClick={e => e.stopPropagation()}><button className={`icobtn star ${account.favs.includes(asset.t) ? 'on' : ''}`} aria-label={`Избранное ${asset.t}`} onClick={() => actions.favToggle(asset.t)}><Icon name="star" /></button></td>
-                </tr>
-              }) : <tr><td colSpan={7}><div className="emptybox"><Icon name="search" /><b>Ничего не найдено</b><p>Измените запрос или сбросьте фильтр сектора.</p><button className="btn btn-ghost btn-sm" onClick={() => actions.resetMarket()}>Сбросить фильтры</button></div></td></tr>}
-            </tbody></table></div>
-          </div>
-        </>
-      )}
       {tab === 'hist' && <History />}
     </>
   )
-}
-
-function MiniSpark({ asset, seed }) {
-  const change = chgOf(asset)
-  const s = Array.from({ length: 14 }, (_, i) => asset.p * (1 + Math.sin(asset.seed + seed + i) * .01 + change / 400 * i))
-  const mn = Math.min(...s)
-  const mx = Math.max(...s)
-  const d = s.map((v, i) => `${i ? 'L' : 'M'} ${2 + i * 6} ${26 - ((v - mn) / ((mx - mn) || 1)) * 20}`).join(' ')
-  return <svg width="84" height="28" viewBox="0 0 84 28"><path d={d} fill="none" stroke={change >= 0 ? 'var(--up)' : 'var(--down)'} strokeWidth="1.8" strokeLinecap="round" /></svg>
 }
 
 function Holdings() {
@@ -255,7 +201,7 @@ function Holdings() {
               <td className={`num ${change >= 0 ? 'up' : 'down'}`}>{fmtPct(change)}</td>
               <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}><button className="btn btn-up btn-sm" onClick={() => actions.openTrade(ticker, 'buy')}>Купить</button> <button className="btn btn-down btn-sm" onClick={() => actions.openTrade(ticker, 'sell')}>Продать</button></td>
             </tr>
-          }) : <tr><td colSpan={9}><div className="emptybox"><Icon name="case" /><b>Позиций пока нет</b><p>Купите первый актив на вкладке «Рынок» — портфель, донат и рейтинг обновятся сразу.</p><button className="btn btn-brand btn-sm" onClick={() => actions.setPageTab('market')}>Перейти к рынку</button></div></td></tr>}
+          }) : <tr><td colSpan={9}><div className="emptybox"><Icon name="case" /><b>Позиций пока нет</b><p>Купите первый актив на вкладке «Рынок» — портфель, донат и рейтинг обновятся сразу.</p><button className="btn btn-brand btn-sm" onClick={() => actions.openMarket()}>Перейти к рынку</button></div></td></tr>}
         </tbody></table></div>
       </div>
     </>
