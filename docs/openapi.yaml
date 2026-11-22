@@ -54,7 +54,7 @@ paths:
                 $ref: "#/components/schemas/InstrumentPage"
               example:
                 items:
-                  - id: SBER
+                  - id: "<ISIN>"
                     ticker: SBER
                     name: Сбербанк
                 total: 1
@@ -446,8 +446,8 @@ components:
       properties:
         id:
           type: string
-          description: Сейчас равен тикеру SECID; клиент MOEX не предоставляет ISIN.
-          example: SBER
+          description: ISIN reported by MOEX.
+          example: "<ISIN>"
         ticker:
           type: string
           description: Биржевой код.
