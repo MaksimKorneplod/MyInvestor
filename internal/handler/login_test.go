@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +21,25 @@ type loginStoreStub struct {
 	savedID     string
 	savedHash   string
 	expiresAt   time.Time
+}
+
+type blockingLoginStore struct {
+	started chan<- struct{}
+	release <-chan struct{}
+}
+
+func (s blockingLoginStore) FindSchool(ctx context.Context, _ string) (service.SchoolCredentials, error) {
+	s.started <- struct{}{}
+	select {
+	case <-s.release:
+		return service.SchoolCredentials{ID: "school-id", Hash: "invalid hash"}, nil
+	case <-ctx.Done():
+		return service.SchoolCredentials{}, ctx.Err()
+	}
+}
+
+func (blockingLoginStore) CreateSchoolSession(context.Context, string, string, time.Time) error {
+	return nil
 }
 
 func (s *loginStoreStub) FindSchool(context.Context, string) (service.SchoolCredentials, error) {
@@ -146,5 +166,46 @@ func TestSchoolLoginDoesNotExposeStoreErrors(t *testing.T) {
 	}
 	if strings.Contains(recorder.Body.String(), "private database details") {
 		t.Fatal("internal error leaked in response")
+	}
+}
+
+func TestSchoolLoginRejectsOverload(t *testing.T) {
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	defer func() { releaseOnce.Do(func() { close(release) }) }()
+	loginHandler := SchoolLogin(service.Login{Store: blockingLoginStore{started: started, release: release}})
+	body := `{"email":"school@example.com","password":"password"}`
+	done := make(chan int, 2)
+
+	for range 2 {
+		go func() {
+			recorder := httptest.NewRecorder()
+			loginHandler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/schools/login", strings.NewReader(body)))
+			done <- recorder.Code
+		}()
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("login did not reach the store")
+		}
+	}
+
+	recorder := httptest.NewRecorder()
+	loginHandler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/schools/login", strings.NewReader(body)))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("overloaded login returned %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(recorder.Body.String(), "Too many login attempts") {
+		t.Fatalf("unexpected overload response: %s", recorder.Body)
+	}
+
+	releaseOnce.Do(func() { close(release) })
+	for range 2 {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("in-flight login did not finish")
+		}
 	}
 }

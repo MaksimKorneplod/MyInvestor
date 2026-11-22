@@ -12,6 +12,8 @@ import (
 )
 
 func SchoolLogin(s service.Login) http.HandlerFunc {
+	// Match registration's bound on concurrent password-hash computations.
+	inFlight := make(chan struct{}, 2)
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		fail := func(status int, message string) {
@@ -36,6 +38,14 @@ func SchoolLogin(s service.Login) http.HandlerFunc {
 		}
 		if strings.TrimSpace(input.Email) == "" || input.Password == "" {
 			fail(http.StatusBadRequest, "Email and password are required.")
+			return
+		}
+
+		select {
+		case inFlight <- struct{}{}:
+			defer func() { <-inFlight }()
+		default:
+			fail(http.StatusServiceUnavailable, "Too many login attempts are being processed; retry later.")
 			return
 		}
 

@@ -99,6 +99,12 @@ func TestLoginAuthenticateInvalidCredentials(t *testing.T) {
 	}
 }
 
+func TestDummyPasswordHashIsWellFormed(t *testing.T) {
+	if err := VerifyPassword("not-the-dummy-password", dummyPasswordHash); !errors.Is(err, ErrPasswordMismatch) {
+		t.Fatalf("VerifyPassword() error = %v, want password mismatch for valid dummy hash", err)
+	}
+}
+
 func TestLoginAuthenticateStoreError(t *testing.T) {
 	storeErr := errors.New("database unavailable")
 	store := &emailStoreStub{err: storeErr}

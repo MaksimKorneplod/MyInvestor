@@ -245,6 +245,14 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: Invalid email or password.
+        '503':
+          description: Too many school login attempts are being processed. Retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Too many login attempts are being processed; retry later.
         '500':
           $ref: '#/components/responses/InternalServerError'
   /api/v1/student/login:

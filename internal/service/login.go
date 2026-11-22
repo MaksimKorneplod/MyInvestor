@@ -31,6 +31,8 @@ type Login struct{ Store LoginStore }
 
 const sessionLifetime = 24 * time.Hour
 
+const dummyPasswordHash = "pbkdf2-sha256$600000$AAECAwQFBgcICQoLDA0ODw$GDXXLNrdj58h6eV5zf2eM0Cq4zdD1nrEcSgwQq0vwIU"
+
 type LoginSession struct {
 	AccessToken string `json:"accessToken"`
 	TokenType   string `json:"tokenType"`
@@ -45,6 +47,9 @@ func (s Login) Authenticate(ctx context.Context, email, password string) (LoginS
 	school, err := s.Store.FindSchool(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrAccountNotFound) {
+			if verifyErr := VerifyPassword(password, dummyPasswordHash); verifyErr != nil && !errors.Is(verifyErr, ErrPasswordMismatch) {
+				return LoginSession{}, fmt.Errorf("verify dummy password hash: %w", verifyErr)
+			}
 			return LoginSession{}, ErrInvalidCredentials
 		}
 		return LoginSession{}, fmt.Errorf("find school: %w", err)
