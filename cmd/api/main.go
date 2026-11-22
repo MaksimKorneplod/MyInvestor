@@ -16,6 +16,7 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex/quotes"
+	"github.com/MaksimKorneplod/MyInvestor/internal/repository/rss"
 	"github.com/MaksimKorneplod/MyInvestor/internal/service"
 )
 
@@ -61,6 +62,13 @@ func main() {
 	quotesService := quotes.New(moexClient, 3*time.Second)
 	quotesHandler := handler.New(quotesService)
 	quotesHandler.Register(mux)
+	mux.HandleFunc("POST /api/v1/schools/login", handler.SchoolLogin(service.Login{Store: repository.SchoolStore{Pool: dbPool}}))
+	feedURL := os.Getenv("RSS_FEED_URL")
+	if feedURL == "" {
+		feedURL = rss.DefaultFeedURL
+	}
+	newsClient := rss.NewClient(&http.Client{Timeout: 10 * time.Second}, feedURL)
+	mux.HandleFunc("GET /api/v1/news", handler.NewsHandler(newsClient))
 
 	port := cfg.HTTPAddr
 	server := &http.Server{
