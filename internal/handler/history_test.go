@@ -145,9 +145,38 @@ func TestInstrumentHistorySharesServeMux(t *testing.T) {
 	}
 }
 
+func TestInstrumentHistoryCanceled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instruments/SBER/history?period=day", nil)
+	ctx, cancel := context.WithCancel(req.Context())
+	cancel()
+	req = req.WithContext(ctx)
+
+	rec := httptest.NewRecorder()
+	InstrumentHistory(&historyStub{err: context.Canceled}, time.Minute).ServeHTTP(rec, req)
+	if rec.Body.Len() != 0 {
+		t.Fatalf("canceled request wrote a body: %s", rec.Body.String())
+	}
+}
+
+func TestInstrumentHistoryDeadline(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instruments/SBER/history?period=day", nil)
+	InstrumentHistory(blockingHistory{}, 20*time.Millisecond).ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+type blockingHistory struct{}
+
+func (blockingHistory) Candles(ctx context.Context, _, _ string) (service.HistoryPage, error) {
+	<-ctx.Done()
+	return service.HistoryPage{}, ctx.Err()
+}
+
 func newAPIMux(history instrumentHistory) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", HealthHandler)
-	MountInstrumentHistory(mux, history)
+	MountInstrumentHistory(mux, history, time.Minute)
 	return mux
 }

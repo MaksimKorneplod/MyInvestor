@@ -47,6 +47,7 @@ MyInvestor — симулятор трейдинга, который позво�
 | `GET` | `/api/v1/health` | Проверка доступности сервера |
 | `POST` | `/api/v1/schools/register` | [Регистрация школы](./docs/school-registration.md) |
 | `GET` | `/api/v1/news` | Новости Интерфакса категорий «Экономика» и «Бизнес» |
+| `GET` | `/api/v1/instruments/{ticker}/history` | Исторические свечи графика инструмента |
 | `POST` | `/api/v1/register` | Регистрация пользователя (планируется) |
 | `POST` | `/api/v1/login` | Вход и получение bearer-токена (планируется) |
 | `POST` | `/api/v1/logout` | Завершение сессии (планируется, требует bearer-токен) |
