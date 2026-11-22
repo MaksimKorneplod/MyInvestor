@@ -73,6 +73,8 @@ export function StudioProvider({ children }) {
     sideOpen: false,
     query: '',
     searchIdx: -1,
+    ticker: '',
+    tickerName: '',
     topAmt: '',
     viewName: '',
     closes: null,
@@ -214,7 +216,8 @@ export function StudioProvider({ children }) {
       setModel(m => ({ ...m, page, msel: [], hsel: [], drawer: null, dd: null, sideOpen: false }))
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
-    market() { this.nav('portfolio'); setModel(m => ({ ...m, account: { ...m.account, ptab: 'market' } })) },
+    market() { this.openMarket() },
+    openMarket() { snd('click'); setModel(m => ({ ...m, page: 'market', drawer: null, dd: null, sideOpen: false })); window.scrollTo({ top: 0, behavior: 'smooth' }) },
     setPageTab(tab) { snd('click'); setModel(m => ({ ...m, msel: [], hsel: [], account: { ...m.account, ptab: tab } })) },
     setPeriod(period) { snd('click'); setModel(m => { const account = { ...m.account, period }; persist(account); return { ...m, account } }) },
     toggleSide() { snd('click'); setModel(m => ({ ...m, sideOpen: !m.sideOpen })) },
@@ -241,6 +244,8 @@ export function StudioProvider({ children }) {
       })
     },
     openAsset(ticker) { snd('click'); setModel(m => ({ ...m, drawer: { type: 'asset', t: ticker }, trade: { side: 'buy', qty: 1 }, dd: null, query: '' })) },
+    openTicker(ticker, name = '') { snd('click'); setModel(m => ({ ...m, page: 'ticker', ticker, tickerName: name, drawer: null, dd: null, query: '' })); window.scrollTo({ top: 0, behavior: 'smooth' }) },
+    closeTicker() { snd('click'); setModel(m => ({ ...m, page: 'market', drawer: null })); window.scrollTo({ top: 0, behavior: 'smooth' }) },
     openTrade(ticker, side) { snd('click'); setModel(m => ({ ...m, drawer: { type: 'asset', t: ticker }, trade: { side, qty: 1 } })) },
     openLesson(id) {
       const lesson = LESSONS.find(item => item.id === id)
