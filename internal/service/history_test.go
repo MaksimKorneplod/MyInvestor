@@ -13,14 +13,23 @@ import (
 )
 
 type stubCandles struct {
-	query moex.HistoryQuery
-	rows  []moex.ChartCandle
-	err   error
+	query   moex.HistoryQuery
+	rows    []moex.ChartCandle
+	err     error
+	missing bool
+	listErr error
 }
 
 func (s *stubCandles) Chart(_ context.Context, q moex.HistoryQuery) ([]moex.ChartCandle, error) {
 	s.query = q
 	return s.rows, s.err
+}
+
+func (s *stubCandles) Listed(context.Context, string) (bool, error) {
+	if s.listErr != nil {
+		return false, s.listErr
+	}
+	return !s.missing, nil
 }
 
 func TestHistoryPeriods(t *testing.T) {
@@ -75,6 +84,14 @@ func TestHistoryEmptyCandles(t *testing.T) {
 
 func TestHistoryKeepsOHLC(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER.json" {
+			if r.URL.Query().Get("start") != "0" {
+				_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"]]}}`)
+			return
+		}
 		if r.URL.Query().Get("start") != "0" {
 			_, _ = io.WriteString(w, `{"candles":{"columns":["begin","open","high","low","close"],"data":[]}}`)
 			return
@@ -104,6 +121,27 @@ func TestHistorySourceError(t *testing.T) {
 	source := &stubCandles{err: errors.New("moex down")}
 	history := NewHistory(source)
 	_, err := history.Candles(context.Background(), "SBER", PeriodMonth)
+	if !errors.Is(err, ErrSourceUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestHistoryUnknownInstrument(t *testing.T) {
+	source := &stubCandles{missing: true}
+	history := NewHistory(source)
+	_, err := history.Candles(context.Background(), "NOPE", PeriodDay)
+	if !errors.Is(err, ErrInvalidInstrument) {
+		t.Fatalf("err = %v", err)
+	}
+	if source.query.Instrument.Security != "" {
+		t.Fatal("chart was requested for an unknown instrument")
+	}
+}
+
+func TestHistoryCatalogError(t *testing.T) {
+	source := &stubCandles{listErr: errors.New("catalog down")}
+	history := NewHistory(source)
+	_, err := history.Candles(context.Background(), "SBER", PeriodDay)
 	if !errors.Is(err, ErrSourceUnavailable) {
 		t.Fatalf("err = %v", err)
 	}

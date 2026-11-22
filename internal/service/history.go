@@ -22,7 +22,7 @@ const (
 var (
 	// ErrInvalidPeriod — период не входит в список, который рисует клиент.
 	ErrInvalidPeriod = errors.New("unsupported period")
-	// ErrInvalidInstrument — тикер пустой или не похож на SECID каталога.
+	// ErrInvalidInstrument — тикер пустой, неверного формата или отсутствует в каталоге.
 	ErrInvalidInstrument = errors.New("invalid instrument")
 	// ErrSourceUnavailable — MOEX не ответил. Тот же смысл, что у каталога инструментов.
 	ErrSourceUnavailable = errors.New("market data source is temporarily unavailable")
@@ -45,9 +45,10 @@ type HistoryPage struct {
 	Candles []Candle `json:"candles"`
 }
 
-// candleSource — клиент свечей графика. Его закрывает *moex.Client.
+// candleSource — клиент свечей и каталога. Его закрывает *moex.Client.
 type candleSource interface {
 	Chart(ctx context.Context, q moex.HistoryQuery) ([]moex.ChartCandle, error)
+	Listed(ctx context.Context, ticker string) (bool, error)
 }
 
 // History собирает свечи графика из MOEX.
@@ -77,6 +78,16 @@ func (h History) Candles(ctx context.Context, ticker, period string) (HistoryPag
 	}
 	query, err := chartPeriod.HistoryQuery(ticker, now)
 	if err != nil {
+		return HistoryPage{}, ErrInvalidInstrument
+	}
+	found, err := h.source.Listed(ctx, ticker)
+	if err != nil {
+		if ctx != nil && ctx.Err() != nil {
+			return HistoryPage{}, ctx.Err()
+		}
+		return HistoryPage{}, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+	}
+	if !found {
 		return HistoryPage{}, ErrInvalidInstrument
 	}
 	rows, err := h.source.Chart(ctx, query)
