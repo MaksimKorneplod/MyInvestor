@@ -55,6 +55,7 @@ func main() {
 
 	mux.HandleFunc("GET /api/v1/health", handler.HealthHandler)
 	mux.HandleFunc("POST /api/v1/schools/register", handler.SchoolRegistration(service.Registration{Store: repository.SchoolStore{Pool: dbPool}}))
+	mux.HandleFunc("POST /api/v1/schools/login", handler.SchoolLogin(service.Login{Store: repository.SchoolStore{Pool: dbPool}}))
 	feedURL := os.Getenv("RSS_FEED_URL")
 	if feedURL == "" {
 		feedURL = rss.DefaultFeedURL
