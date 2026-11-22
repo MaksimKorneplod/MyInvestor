@@ -17,6 +17,14 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/rss"
 	"github.com/MaksimKorneplod/MyInvestor/internal/service"
+	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
+)
+
+const (
+	serverWriteTimeout = 15 * time.Second
+	// Один предел на Listed и все страницы свечей. Он короче WriteTimeout,
+	// чтобы сервер успел отдать 503, а не оборвать соединение.
+	instrumentHistoryBudget = 10 * time.Second
 )
 
 const instrumentCatalogTTL = 30 * time.Minute
@@ -58,6 +66,11 @@ func main() {
 
 	mux.HandleFunc("GET /api/v1/health", handler.HealthHandler)
 	mux.HandleFunc("POST /api/v1/schools/register", handler.SchoolRegistration(service.Registration{Store: repository.SchoolStore{Pool: dbPool}}))
+
+	moexClient := moex.New("")
+	quotesService := quotes.New(moexClient, 3*time.Second)
+	quotesHandler := handler.New(quotesService)
+	quotesHandler.Register(mux)
 	mux.HandleFunc("POST /api/v1/schools/login", handler.SchoolLogin(service.Login{Store: repository.SchoolStore{Pool: dbPool}}))
 	feedURL := os.Getenv("RSS_FEED_URL")
 	if feedURL == "" {
@@ -65,6 +78,7 @@ func main() {
 	}
 	newsClient := rss.NewClient(&http.Client{Timeout: 10 * time.Second}, feedURL)
 	mux.HandleFunc("GET /api/v1/news", handler.NewsHandler(newsClient))
+	handler.MountInstrumentHistory(mux, service.NewHistory(moexClient), instrumentHistoryBudget)
 
 	moexClient := moex.New("")
 	stockLister := moex.NewStockLister(moexClient)
@@ -73,13 +87,12 @@ func main() {
 	mux.HandleFunc("GET /api/v1/instruments", handler.InstrumentsHandler(instrumentCatalog))
 
 	port := cfg.HTTPAddr
-
 	server := &http.Server{
 		Addr:              port,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		WriteTimeout:      serverWriteTimeout,
 		IdleTimeout:       60 * time.Second,
 	}
 

@@ -203,6 +203,75 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/v1/instruments/{ticker}/history:
+    get:
+      operationId: getInstrumentHistory
+      summary: Get historical candles for an instrument chart
+      description: |
+        Returns OHLC candles for one catalog instrument and a chart period.
+        The ticker is the SECID from the instrument catalog.
+        Prices are decimal strings as received from MOEX. High and low are
+        omitted when the source cell is null. An empty candle list is a
+        successful response.
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: Instrument ticker (SECID), for example SBER.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 32
+            pattern: '^[A-Za-z0-9._-]+$'
+          example: SBER
+        - name: period
+          in: query
+          required: true
+          description: Chart period. halfYear is six months.
+          schema:
+            type: string
+            enum: [day, week, month, halfYear, year, fiveYears]
+          example: month
+      responses:
+        '200':
+          description: Candles for the requested instrument and period.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstrumentHistory'
+              example:
+                ticker: SBER
+                period: day
+                candles:
+                  - begin: "2026-03-01T09:30:00+03:00"
+                    open: "300.5"
+                    high: "301"
+                    low: "299"
+                    close: "300.8"
+        '400':
+          description: The period is not supported or the instrument ticker is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                period:
+                  value:
+                    error: unsupported period
+                instrument:
+                  value:
+                    error: invalid instrument
+        '503':
+          description: MOEX did not return candles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: market data source is temporarily unavailable, please try again later
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/v1/schools/register:
     post:
       operationId: registerSchool
@@ -271,6 +340,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SchoolRegistrationError'
+
   /api/v1/schools/login:
     post:
       operationId: loginSchool
@@ -429,6 +499,103 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  # --- НОВЫЕ ПУТИ ДЛЯ КОТИРОВОК ---
+  /api/v1/quotes:
+    get:
+      operationId: getQuotesMarket
+      summary: Get market snapshot
+      description: Returns quotes for all securities in the specified market/board.
+      parameters:
+        - $ref: '#/components/parameters/EngineParam'
+        - $ref: '#/components/parameters/MarketParam'
+        - $ref: '#/components/parameters/BoardParam'
+      responses:
+        '200':
+          description: Successful response with a list of quotes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuoteDTO'
+        '400':
+          $ref: '#/components/responses/QuoteBadRequest'
+        '500':
+          $ref: '#/components/responses/QuoteInternalServerError'
+        '502':
+          $ref: '#/components/responses/QuoteBadGateway'
+        '503':
+          $ref: '#/components/responses/QuoteServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/QuoteGatewayTimeout'
+
+  /api/v1/quotes:batch:
+    post:
+      operationId: getQuotesBatch
+      summary: Get quotes for a list of tickers
+      description: Returns quotes for a specific list of tickers (e.g., a portfolio).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchRequest'
+      responses:
+        '200':
+          description: Successful response with a list of quotes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuoteDTO'
+        '400':
+          $ref: '#/components/responses/QuoteBadRequest'
+        '500':
+          $ref: '#/components/responses/QuoteInternalServerError'
+        '502':
+          $ref: '#/components/responses/QuoteBadGateway'
+        '503':
+          $ref: '#/components/responses/QuoteServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/QuoteGatewayTimeout'
+
+  /api/v1/quotes/{engine}/{market}/{security}:
+    get:
+      operationId: getQuoteOne
+      summary: Get quote for a single security
+      parameters:
+        - $ref: '#/components/parameters/EnginePathParam'
+        - $ref: '#/components/parameters/MarketPathParam'
+        - $ref: '#/components/parameters/SecurityPathParam'
+        - $ref: '#/components/parameters/BoardParam'
+      responses:
+        '200':
+          description: Successful response with a single quote.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteDTO'
+        '400':
+          $ref: '#/components/responses/QuoteBadRequest'
+        '404':
+          description: Security not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteError'
+              example:
+                error: not_found
+                message: security not found
+        '500':
+          $ref: '#/components/responses/QuoteInternalServerError'
+        '502':
+          $ref: '#/components/responses/QuoteBadGateway'
+        '503':
+          $ref: '#/components/responses/QuoteServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/QuoteGatewayTimeout'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -439,6 +606,57 @@ components:
         Send the session token in the Authorization header as
         `Authorization: Bearer <token>`. Tokens expire after 24 hours.
         A successful logout revokes the token.
+
+  parameters:
+    EngineParam:
+      name: engine
+      in: query
+      required: true
+      description: Exchange engine (e.g., stock, currency).
+      schema:
+        type: string
+        example: stock
+    MarketParam:
+      name: market
+      in: query
+      required: true
+      description: Market within the engine.
+      schema:
+        type: string
+        example: shares
+    BoardParam:
+      name: board
+      in: query
+      required: false
+      description: Trading board/mode.
+      schema:
+        type: string
+        example: TQBR
+    EnginePathParam:
+      name: engine
+      in: path
+      required: true
+      description: Exchange engine.
+      schema:
+        type: string
+        example: stock
+    MarketPathParam:
+      name: market
+      in: path
+      required: true
+      description: Market within the engine.
+      schema:
+        type: string
+        example: shares
+    SecurityPathParam:
+      name: security
+      in: path
+      required: true
+      description: Security ticker.
+      schema:
+        type: string
+        example: SBER
+
   schemas:
     Instrument:
       type: object
@@ -515,6 +733,110 @@ components:
           type: string
           description: Human-readable error message.
           example: Invalid input data.
+    Candle:
+      type: object
+      required: [begin, open, close]
+      properties:
+        begin:
+          type: string
+          format: date-time
+          description: Candle timestamp.
+        open:
+          type: string
+          description: Open price as a decimal string.
+          example: "300.5"
+        high:
+          type: string
+          description: High price. Omitted when MOEX sends null.
+          example: "301"
+        low:
+          type: string
+          description: Low price. Omitted when MOEX sends null.
+          example: "299"
+        close:
+          type: string
+          description: Close price as a decimal string.
+          example: "300.8"
+    InstrumentHistory:
+      type: object
+      required: [ticker, period, candles]
+      properties:
+        ticker:
+          type: string
+          example: SBER
+        period:
+          type: string
+          enum: [day, week, month, halfYear, year, fiveYears]
+        candles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candle'
+    BatchRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - engine
+        - market
+        - tickers
+      properties:
+        engine:
+          type: string
+          example: stock
+        market:
+          type: string
+          example: shares
+        board:
+          type: string
+          example: TQBR
+        tickers:
+          type: array
+          items:
+            type: string
+          example: ["SBER", "GAZP"]
+
+    QuoteDTO:
+      type: object
+      required:
+        - ticker
+        - receivedAt
+      properties:
+        ticker:
+          type: string
+          description: Security ticker.
+          example: SBER
+        last:
+          type: string
+          description: Last price (omitted if no data).
+          example: "250.5"
+        changePercent:
+          type: string
+          description: Percent change (omitted if no data).
+          example: "+1.25"
+        quoteTime:
+          type: string
+          format: date-time
+          description: Time of the last trade (omitted if no data).
+          example: "2023-10-25T14:30:00+03:00"
+        receivedAt:
+          type: string
+          format: date-time
+          description: Time the data was received from MOEX ISS.
+          example: "2023-10-25T14:30:05+03:00"
+
+    QuoteError:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Stable error code.
+          example: bad_market
+        message:
+          type: string
+          description: Human-readable error description.
+          example: 'board "INVALID" not allowed'
   responses:
     BadRequest:
       description: The request body is malformed or contains invalid fields.
@@ -540,3 +862,35 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error: Internal server error.
+
+    # --- НОВЫЕ ОТВЕТЫ ДЛЯ КОТИРОВОК ---
+    QuoteBadRequest:
+      description: The request is malformed or contains invalid parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QuoteError'
+    QuoteInternalServerError:
+      description: An unexpected server error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QuoteError'
+    QuoteBadGateway:
+      description: Upstream (MOEX ISS) returned invalid data.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QuoteError'
+    QuoteServiceUnavailable:
+      description: Service is unavailable (network issue, rate limit).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QuoteError'
+    QuoteGatewayTimeout:
+      description: Timeout while requesting upstream.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QuoteError'
