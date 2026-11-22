@@ -3,6 +3,7 @@ package quotes
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
@@ -37,6 +38,9 @@ func New(client QuoteFetcher, ttl time.Duration) *Service {
 
 // One — одна бумага. Узкий кэш-ключ, точная свежесть.
 func (s *Service) One(ctx context.Context, ref moex.Instrument) (*moex.Quote, error) {
+	ref.Security = strings.ToUpper(strings.TrimSpace(ref.Security))
+	ref.Engine = strings.ToUpper(ref.Engine)
+	ref.Market = strings.ToUpper(ref.Market)
 	if err := ident("security", ref.Security); err != nil {
 		return nil, err
 	}
