@@ -102,9 +102,9 @@ func (c *Client) securities(ctx context.Context, q SecuritiesQuery) ([]Security,
 	query := url.Values{}
 	query.Set("iss.meta", "off")
 	query.Set("iss.only", "securities,securities.cursor")
-	query.Set("securities.columns", "SECID,SHORTNAME")
+	query.Set("securities.columns", "SECID,SHORTNAME,ISIN")
 
-	pages, err := c.collect(ctx, path+"/securities.json", query, "securities", "SECID", "SHORTNAME")
+	pages, err := c.collect(ctx, path+"/securities.json", query, "securities", "SECID", "SHORTNAME", "ISIN")
 	if err != nil {
 		return nil, err
 	}

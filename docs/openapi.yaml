@@ -10,6 +10,96 @@ servers:
   - url: http://localhost:8080
     description: Local development
 paths:
+  /api/v1/instruments:
+    get:
+      tags:
+        - Instruments
+      summary: Каталог и поиск акций MOEX
+      description: >
+        Возвращает постраничный список акций MOEX (режим торгов TQBR).
+        Поиск идёт по тикеру и названию без учёта регистра. Если параметр q
+        отсутствует или пуст, возвращается весь каталог, отсортированный по тикеру.
+      operationId: listInstruments
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Строка поиска по тикеру или названию, не длиннее 100 рун; более длинное значение даёт 400.
+          schema:
+            type: string
+            maxLength: 100
+          example: сбер
+        - name: limit
+          in: query
+          required: false
+          description: Размер страницы (по умолчанию 50). Нецелое значение или значение меньше 1 даёт 400; больше 100 ограничивается до 100.
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Сколько записей пропустить (по умолчанию 0). Нецелое или отрицательное значение даёт 400.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Страница каталога. Если совпадений нет, items пустой массив.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstrumentPage"
+              example:
+                items:
+                  - id: "<ISIN>"
+                    ticker: SBER
+                    name: Сбербанк
+                total: 1
+                limit: 50
+                offset: 0
+        "400":
+          description: Неверный параметр запроса (limit, offset или слишком длинный q).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid limit parameter
+        "405":
+          description: Метод не разрешён. Зарегистрированный HTTP mux возвращает текстовый ответ.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Method Not Allowed\n"
+        "500":
+          description: Непредвиденная ошибка сервера.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: internal server error
+        "503":
+          description: Источник данных (MOEX) временно недоступен или биржа отвечает слишком медленно.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: market data source is temporarily unavailable, please try again later
+        "504":
+          description: Истёк дедлайн обработки запроса.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: request timed out, please try again later
+
   /api/v1/health:
     get:
       operationId: getHealth
@@ -568,6 +658,42 @@ components:
         example: SBER
 
   schemas:
+    Instrument:
+      type: object
+      required: [id, ticker, name]
+      properties:
+        id:
+          type: string
+          description: ISIN reported by MOEX.
+          example: "<ISIN>"
+        ticker:
+          type: string
+          description: Биржевой код.
+          example: SBER
+        name:
+          type: string
+          description: Отображаемое (краткое) название.
+          example: Сбербанк
+    InstrumentPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Instrument"
+        total:
+          type: integer
+          description: Всего совпадений до применения limit и offset.
+          example: 1
+        limit:
+          type: integer
+          description: Фактически применённый размер страницы.
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
     SchoolRegistrationError:
       type: object
       required: [error]

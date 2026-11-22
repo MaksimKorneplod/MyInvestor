@@ -86,10 +86,10 @@ func TestHistoryKeepsOHLC(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER.json" {
 			if r.URL.Query().Get("start") != "0" {
-				_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
+				_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME","ISIN"],"data":[]}}`)
 				return
 			}
-			_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"]]}}`)
+			_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME","ISIN"],"data":[["SBER","Сбербанк","RU0009029540"]]}}`)
 			return
 		}
 		if r.URL.Query().Get("start") != "0" {

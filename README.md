@@ -44,6 +44,7 @@ MyInvestor — симулятор трейдинга, который позво�
 
 | Метод | Путь | Назначение |
 |---|---|---|
+| `GET` | `/api/v1/instruments` | Поиск и постраничный список акций MOEX |
 | `GET` | `/api/v1/health` | Проверка доступности сервера |
 | `POST` | `/api/v1/schools/register` | [Регистрация школы](./docs/school-registration.md) |
 | `POST` | `/api/v1/schools/login` | Вход школы и получение bearer-токена |

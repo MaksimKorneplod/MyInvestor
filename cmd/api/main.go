@@ -27,6 +27,8 @@ const (
 	instrumentHistoryBudget = 10 * time.Second
 )
 
+const instrumentCatalogTTL = 30 * time.Minute
+
 func serverStart(server *http.Server) error {
 	slog.Info("Starting server", "addr", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -77,6 +79,11 @@ func main() {
 	newsClient := rss.NewClient(&http.Client{Timeout: 10 * time.Second}, feedURL)
 	mux.HandleFunc("GET /api/v1/news", handler.NewsHandler(newsClient))
 	handler.MountInstrumentHistory(mux, service.NewHistory(moexClient), instrumentHistoryBudget)
+
+	stockLister := moex.NewStockLister(moexClient)
+	stockSource := service.NewMOEXStockSource(stockLister)
+	instrumentCatalog := service.NewCatalog(stockSource, instrumentCatalogTTL)
+	mux.HandleFunc("GET /api/v1/instruments", handler.InstrumentsHandler(instrumentCatalog))
 
 	port := cfg.HTTPAddr
 	server := &http.Server{
