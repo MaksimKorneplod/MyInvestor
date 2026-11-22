@@ -271,6 +271,80 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SchoolRegistrationError'
+  /api/v1/schools/login:
+    post:
+      operationId: loginSchool
+      summary: Start an authenticated session for school
+      description: |
+        On success, returns an opaque bearer token valid for 24 hours.
+        Invalid email and password combinations return the same response
+        so the API does not reveal whether an email is registered.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: johndoe@example.com
+                password:
+                  type: string
+                  format: password
+                  writeOnly: true
+                  example: example-password
+      responses:
+        '200':
+          description: Authentication succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accessToken
+                  - tokenType
+                  - expiresIn
+                properties:
+                  accessToken:
+                    type: string
+                    description: Opaque bearer token. Treat it as a secret.
+                    example: opaque-token-value
+                  tokenType:
+                    type: string
+                    enum: [Bearer]
+                  expiresIn:
+                    type: integer
+                    description: Token lifetime in seconds.
+                    example: 86400
+              example:
+                accessToken: opaque-token-value
+                tokenType: Bearer
+                expiresIn: 86400
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: The email or password is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid email or password.
+        '503':
+          description: Too many school login attempts are being processed. Retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Too many login attempts are being processed; retry later.
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/v1/student/login:
     post:
       operationId: loginStudent
@@ -340,7 +414,6 @@ paths:
                 error: Invalid email or password.
         '500':
           $ref: '#/components/responses/InternalServerError'
-
   /api/v1/logout:
     post:
       operationId: logout

@@ -2,10 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/pbkdf2"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/mail"
@@ -43,18 +39,4 @@ func (s Registration) Register(ctx context.Context, login, email, password strin
 		return School{}, err
 	}
 	return s.Store.CreateSchool(ctx, login, email, hash)
-}
-
-// HashPassword uses PBKDF2-HMAC-SHA256 with a fresh 128-bit salt.
-// The algorithm, work factor, salt and derived key are stored for future login verification.
-func HashPassword(password string) (string, error) {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-	key, err := pbkdf2.Key(sha256.New, password, salt, 600000, 32)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("pbkdf2-sha256$600000$%s$%s", base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key)), nil
 }
