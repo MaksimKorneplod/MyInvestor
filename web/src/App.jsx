@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Logo, Icon, Mark } from './icons'
+import { instruments } from './api'
 import { LESSONS, TRADERS, chgOf, dayPL, fmt2, fmtMoney, fmtPct, levelOf, myRet, totalVal } from './mock'
 import { Drawers, Home, Learn, Portfolio, Rating, Settings } from './screens'
+import { MarketScreen, TickerPage } from './board'
 import { StudioProvider, useStudio } from './studio'
 
 const NAV = [['home', 'home', 'Главная'], ['portfolio', 'case', 'Портфель'], ['rating', 'trophy', 'Рейтинг'], ['learn', 'book', 'Обучение'], ['settings', 'gear', 'Настройки']]
@@ -29,11 +31,31 @@ function Shell() {
   const day = dayPL(account)
   const base = totalVal(account) - day
   const pct = base ? day / base * 100 : 0
-  const q = model.query.trim().toLowerCase()
-  const assets = q ? [...account.instruments, ...(model.catalog || []).filter(item => !account.instruments.some(own => own.t === item.t))].filter(item => item.n.toLowerCase().includes(q) || item.t.toLowerCase().includes(q)).slice(0, 6) : []
-  const lessons = q ? LESSONS.filter(lesson => lesson.t.toLowerCase().includes(q)).slice(0, 3) : []
-  const results = [...assets.map(asset => ({ kind: 'asset', asset })), ...lessons.map(lesson => ({ kind: 'lesson', lesson }))]
+  const q = model.query.trim()
+  const [moexHits, setMoexHits] = useState([])
+  const [searchState, setSearchState] = useState('ready')
+  const lessons = q ? LESSONS.filter(lesson => lesson.t.toLowerCase().includes(q.toLowerCase())).slice(0, 3) : []
+  const mockHits = q && searchState === 'error'
+    ? account.instruments.filter(item => item.n.toLowerCase().includes(q.toLowerCase()) || item.t.toLowerCase().includes(q.toLowerCase())).slice(0, 6)
+    : []
+  const results = [
+    ...moexHits.map(item => ({ kind: 'moex', item })),
+    ...mockHits.map(asset => ({ kind: 'asset', asset })),
+    ...lessons.map(lesson => ({ kind: 'lesson', lesson })),
+  ]
   const rank = [...TRADERS.map(trader => trader.ret), myRet(account)].sort((a, b) => b - a).indexOf(myRet(account)) + 1
+
+  useEffect(() => {
+    if ([...q].length > 100 || !q) { setMoexHits([]); setSearchState('ready'); return undefined }
+    let live = true
+    setSearchState('loading')
+    const id = setTimeout(() => {
+      instruments({ q, limit: 8, offset: 0 })
+        .then(data => { if (live) { setMoexHits(data?.items || []); setSearchState('ready') } })
+        .catch(() => { if (live) { setMoexHits([]); setSearchState('error') } })
+    }, 250)
+    return () => { live = false; clearTimeout(id) }
+  }, [q])
 
   useEffect(() => {
     const onKey = (event) => {
@@ -54,7 +76,8 @@ function Shell() {
       }
       if (event.target === searchRef.current && event.key === 'Enter' && results.length) {
         const pick = results[Math.max(0, Math.min(results.length - 1, model.searchIdx))] || results[0]
-        if (pick.kind === 'asset') actions.openAsset(pick.asset.t)
+        if (pick.kind === 'moex') actions.openTicker(pick.item.ticker, pick.item.name)
+        else if (pick.kind === 'asset') actions.openAsset(pick.asset.t)
         else actions.openLesson(pick.lesson.id)
       }
     }
@@ -76,7 +99,7 @@ function Shell() {
       <aside className={`sidebar${model.sideOpen ? ' open' : ''}`}>
         <div className="logo"><Logo /><div><b>MyInvestor</b><small>СИМУЛЯТОР · v2.0</small></div></div>
         <nav className="snav" aria-label="Основная навигация">
-          {NAV.map(([page, icon, name]) => <button key={page} className={model.page === page ? 'on' : ''} onClick={() => actions.nav(page)}><Icon name={icon} /><span>{name}</span>{page === 'learn' ? <span className="nbadge">{account.lessons.length}/8</span> : null}</button>)}
+          {NAV.map(([page, icon, name]) => <button key={page} className={model.page === page || (page === 'portfolio' && model.page === 'ticker') ? 'on' : ''} onClick={() => actions.nav(page)}><Icon name={icon} /><span>{name}</span>{page === 'learn' ? <span className="nbadge">{account.lessons.length}/8</span> : null}</button>)}
         </nav>
         <div className="sxp"><div className="t"><span>Уровень <b>{level}</b></span><span>{account.xp % 100} / 100 XP</span></div><div className="xpbar"><i style={{ width: `${account.xp % 100}%` }} /></div></div>
         <div className="spromo">
@@ -90,7 +113,7 @@ function Shell() {
           <button className="burger" aria-label="Открыть меню" onClick={() => actions.toggleSide()}><Icon name="menu" /></button>
           <div className="gsearch"><div className="box">
             <Icon name="search" />
-            <input ref={searchRef} value={model.query} placeholder="Поиск акций, компаний, уроков…" autoComplete="off" aria-label="Глобальный поиск" onChange={e => actions.setQuery(e.target.value)} />
+            <input ref={searchRef} value={model.query} placeholder="Поиск по всем акциям: SBER, Газпром…" autoComplete="off" aria-label="Глобальный поиск" onChange={e => actions.setQuery(e.target.value)} />
             <kbd>/</kbd>
           </div></div>
           <div className="totalchip" title="Стоимость счёта"><span>{fmtMoney(totalVal(account), account.settings.compact)}</span><span className={`d ${pct >= 0 ? 'up' : 'down'}`}>{fmtPct(pct)}</span></div>
@@ -103,6 +126,8 @@ function Shell() {
         </header>
         <main className="page">
           {model.page === 'home' && <Home />}
+          {model.page === 'market' && <MarketScreen />}
+          {model.page === 'ticker' && <TickerPage />}
           {model.page === 'portfolio' && <Portfolio />}
           {model.page === 'rating' && <Rating />}
           {model.page === 'learn' && <Learn />}
@@ -112,11 +137,13 @@ function Shell() {
       <Drawers />
       {model.dd === 'search' && (
         <div className="dd open" role="listbox" aria-label="Результаты поиска" style={{ top: (searchRef.current?.getBoundingClientRect().bottom || 70) + 10, left: searchRef.current?.getBoundingClientRect().left || 260, width: 340 }}>
-          {results.length ? results.map((item, index) => item.kind === 'asset' ? (
+          {results.length ? results.map((item, index) => item.kind === 'moex' ? (
+            <div key={item.item.ticker} className={`sr-item${index === model.searchIdx ? ' hot' : ''}`} role="option" onClick={() => actions.openTicker(item.item.ticker, item.item.name)}><span className="flogo" style={{ background: '#3B2A36' }}>{item.item.ticker.slice(0, 1)}</span><div><div className="n">{item.item.name}</div><div className="t">{item.item.ticker} · MOEX</div></div></div>
+          ) : item.kind === 'asset' ? (
             <div key={item.asset.t} className={`sr-item${index === model.searchIdx ? ' hot' : ''}`} role="option" onClick={() => actions.openAsset(item.asset.t)}><span><Mark asset={item.asset} /></span><div><div className="n">{item.asset.n}</div><div className="t">{item.asset.t}</div></div><div className="p"><b>{fmt2(item.asset.p)}</b><small className={chgOf(item.asset) >= 0 ? 'up' : 'down'}>{fmtPct(chgOf(item.asset))}</small></div></div>
           ) : (
             <div key={item.lesson.id} className={`sr-item${index === model.searchIdx ? ' hot' : ''}`} role="option" onClick={() => actions.openLesson(item.lesson.id)}><span className="flogo" style={{ background: 'rgba(232,17,45,.18)', color: 'var(--brand2)' }}><Icon name="book" style={{ width: 16, height: 16 }} /></span><div><div className="n">{item.lesson.t}</div><div className="t">Урок {item.lesson.id} · {item.lesson.min} мин{item.lesson.lvl > level ? ` · ур. ${item.lesson.lvl}` : ''}</div></div></div>
-          )) : <div className="sr-none">Ничего не найдено по «{model.query}». Попробуйте тикер: NVDA, TSLA…</div>}
+          )) : <div className="sr-none">Ничего не найдено по «{model.query}». Попробуйте тикер: SBER, GAZP…</div>}
         </div>
       )}
       {model.dd === 'notif' && (
