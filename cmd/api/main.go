@@ -15,9 +15,9 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/handler"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
-	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex/quotes"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/rss"
 	"github.com/MaksimKorneplod/MyInvestor/internal/service"
+	"github.com/MaksimKorneplod/MyInvestor/internal/service/quotes"
 )
 
 func serverStart(server *http.Server) error {
