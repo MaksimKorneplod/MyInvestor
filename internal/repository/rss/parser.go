@@ -37,9 +37,9 @@ func filterRssFeed(r io.Reader) (RssFeed, error) {
 			slog.Warn("skipping invalid RSS item", "guid", item.GUID, "title", item.Title, "error", err)
 			continue
 		}
-		if item.Category != "Экономика" && item.Category != "Бизнес" {
-			continue
-		}
+		// if item.Category != "Экономика" && item.Category != "Бизнес" {
+		// 	continue
+		// }
 		feed.Channel.Items = append(feed.Channel.Items, item)
 	}
 	return feed, nil
