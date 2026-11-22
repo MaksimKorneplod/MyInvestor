@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	dateLayout = "2006-01-02"
-	timeLayout = "2006-01-02 15:04:05"
-	maxPages   = 100
+	dateLayout     = "2006-01-02"
+	timeLayout     = "2006-01-02 15:04:05"
+	timeHourLayout = "15:04:05"
+	maxPages       = 100
 )
 
 var token = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
@@ -129,7 +130,24 @@ func cellDecimal(raw json.RawMessage) (Decimal, bool, error) {
 	if _, err := number.Float64(); err != nil {
 		return Decimal{}, false, &ParseError{Reason: "number cell"}
 	}
-	return Decimal{text: number.String()}, true, nil
+	return Decimal{Text: number.String()}, true, nil
+}
+func cellTime(raw json.RawMessage, timeGetted time.Time) (time.Time, bool, error) {
+	if isNull(raw) {
+		return time.Time{}, false, nil
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil || text == "" {
+		return time.Time{}, false, &ParseError{Reason: "time cell"}
+	}
+	timeNowInHour, err := time.ParseInLocation(timeHourLayout, text, moscow)
+	if err != nil {
+		return time.Time{}, false, &ParseError{Reason: "time cell"}
+	}
+	result := time.Date(timeGetted.In(moscow).Year(), timeGetted.In(moscow).Month(), timeGetted.In(moscow).Day(),
+		timeNowInHour.Hour(), timeNowInHour.Minute(), timeNowInHour.Second(), timeNowInHour.Nanosecond(),
+		moscow)
+	return result, true, nil
 }
 
 func cellInt(raw json.RawMessage) (int, error) {
@@ -138,7 +156,7 @@ func cellInt(raw json.RawMessage) (int, error) {
 		return 0, &ParseError{Reason: "cursor"}
 	}
 	// Курсор — целое. 2.5 нельзя молча обрезать до 2: это битый ответ.
-	value, err := strconv.Atoi(number.text)
+	value, err := strconv.Atoi(number.Text)
 	if err != nil {
 		return 0, &ParseError{Reason: "cursor"}
 	}
@@ -220,10 +238,10 @@ func parseSecurities(pages []table) ([]Security, error) {
 	return out, nil
 }
 
-func parseQuotes(pages []table) ([]Quote, error) {
+func parseQuotes(pages []table, receivedAt time.Time) ([]Quote, error) {
 	out := make([]Quote, 0)
 	for _, page := range pages {
-		index, err := page.indexes("SECID", "LAST", "LASTCHANGEPRCNT")
+		index, err := page.indexes("SECID", "LAST", "LASTCHANGEPRCNT", "TIME")
 		if err != nil {
 			return nil, err
 		}
@@ -255,14 +273,26 @@ func parseQuotes(pages []table) ([]Quote, error) {
 			if err != nil {
 				return nil, err
 			}
+			rawTime, err := at(row, index["TIME"])
+			if err != nil {
+				return nil, err
+			}
+			quoteTime, hasTime, err := cellTime(rawTime, receivedAt)
+			if err != nil {
+				return nil, err
+			}
 			if !hasLast {
 				continue
 			}
 			price := last
-			quote := Quote{SecID: secid, Last: &price}
+			quote := Quote{SecID: secid, Last: &price, UpdateTime: receivedAt}
 			if hasChange {
 				delta := change
 				quote.LastChangePercent = &delta
+			}
+			if hasTime {
+				qt := quoteTime
+				quote.QuoteTime = &qt
 			}
 			out = append(out, quote)
 		}
