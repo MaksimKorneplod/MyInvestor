@@ -33,8 +33,6 @@ type Quote struct {
 	SecID             string
 	Last              *Decimal
 	LastChangePercent *Decimal
-	QuoteTime         *time.Time // время котировки на бирже
-	UpdateTime        time.Time  // время получения данных котировок программой
 }
 
 // HistoryQuery — свечи бумаги. Исторический ряд графика в MOEXService
@@ -55,18 +53,18 @@ type HistoryRow struct {
 
 // Decimal хранит десятичную запись числа так, как её прислал ISS.
 type Decimal struct {
-	Text string
+	text string
 }
 
 // String возвращает исходную запись числа.
-func (d Decimal) String() string { return d.Text }
+func (d Decimal) String() string { return d.text }
 
 // Float64 нужен графику. Для хранения котировки используется String.
 func (d Decimal) Float64() (float64, error) {
-	if d.Text == "" {
+	if d.text == "" {
 		return 0, fmt.Errorf("%w: empty decimal", ErrParse)
 	}
-	return strconv.ParseFloat(d.Text, 64)
+	return strconv.ParseFloat(d.text, 64)
 }
 
 // ChartPeriod повторяет enum графика iOS.
