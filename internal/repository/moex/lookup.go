@@ -16,9 +16,9 @@ func (c *Client) Listed(ctx context.Context, ticker string) (bool, error) {
 	query := url.Values{}
 	query.Set("iss.meta", "off")
 	query.Set("iss.only", "securities,securities.cursor")
-	query.Set("securities.columns", "SECID,SHORTNAME")
+	query.Set("securities.columns", "SECID,SHORTNAME,ISIN")
 
-	pages, err := c.collect(ctx, path, query, "securities", "SECID")
+	pages, err := c.collect(ctx, path, query, "securities", "SECID", "SHORTNAME", "ISIN")
 	if err != nil {
 		return false, fmt.Errorf("moex catalog: %w", err)
 	}

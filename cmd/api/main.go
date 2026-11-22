@@ -80,7 +80,6 @@ func main() {
 	mux.HandleFunc("GET /api/v1/news", handler.NewsHandler(newsClient))
 	handler.MountInstrumentHistory(mux, service.NewHistory(moexClient), instrumentHistoryBudget)
 
-	moexClient := moex.New("")
 	stockLister := moex.NewStockLister(moexClient)
 	stockSource := service.NewMOEXStockSource(stockLister)
 	instrumentCatalog := service.NewCatalog(stockSource, instrumentCatalogTTL)

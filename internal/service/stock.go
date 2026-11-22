@@ -63,9 +63,6 @@ func (s *moexStockSource) ListStocks(ctx context.Context) ([]Instrument, error) 
 	return instruments, nil
 }
 
-// ErrSourceUnavailable indicates that the external data source is temporarily unavailable.
-var ErrSourceUnavailable = errors.New("market data source is temporarily unavailable")
-
 const stockSourceLoadTimeout = 30 * time.Second
 
 // Page is the paginated result of a search request.

@@ -17,12 +17,6 @@ type InstrumentSearcher interface {
 	Search(ctx context.Context, query string, limit, offset int) (service.Page, error)
 }
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
 // InstrumentsHandler provides the /api/v1/instruments HTTP endpoint.
 func InstrumentsHandler(searcher InstrumentSearcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
