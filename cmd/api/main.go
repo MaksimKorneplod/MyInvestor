@@ -14,6 +14,7 @@ import (
 	"github.com/MaksimKorneplod/MyInvestor/internal/database"
 	"github.com/MaksimKorneplod/MyInvestor/internal/handler"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository"
+	"github.com/MaksimKorneplod/MyInvestor/internal/repository/moex"
 	"github.com/MaksimKorneplod/MyInvestor/internal/repository/rss"
 	"github.com/MaksimKorneplod/MyInvestor/internal/service"
 )
@@ -61,6 +62,7 @@ func main() {
 	}
 	newsClient := rss.NewClient(&http.Client{Timeout: 10 * time.Second}, feedURL)
 	mux.HandleFunc("GET /api/v1/news", handler.NewsHandler(newsClient))
+	handler.MountInstrumentHistory(mux, service.NewHistory(moex.New("")))
 
 	port := cfg.HTTPAddr
 
