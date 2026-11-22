@@ -35,6 +35,84 @@ paths:
                 status: ok
                 app: MyInvestor
 
+  /api/v1/news:
+    get:
+      operationId: getNews
+      summary: Get filtered news from Interfax
+      description: |
+        Reads the Interfax RSS feed and returns news in the «Экономика» and «Бизнес» categories.
+        Items are ordered by publication date descending; items without a
+        publication date follow dated items in source order. See docs/news.md
+        for source details and record validation rules.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of news items to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          description: Number of matching news items to skip.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Filtered and paginated news items.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, limit, offset]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [title, link]
+                      properties:
+                        title:
+                          type: string
+                        link:
+                          type: string
+                          format: uri
+                        description:
+                          type: string
+                        pubDate:
+                          type: string
+                          description: Original RSS publication date.
+                  total:
+                    type: integer
+                    description: Number of matching items before pagination.
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '400':
+          description: Invalid limit or offset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: The RSS source returned invalid XML.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: The RSS source is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/v1/schools/register:
     post:
       operationId: registerSchool
@@ -369,7 +447,7 @@ components:
         Send the session token in the Authorization header as
         `Authorization: Bearer <token>`. Tokens expire after 24 hours.
         A successful logout revokes the token.
-  
+
   parameters:
     EngineParam:
       name: engine
@@ -460,7 +538,7 @@ components:
           type: string
           description: Human-readable error message.
           example: Invalid input data.
-    
+
     # --- НОВЫЕ СХЕМЫ ДЛЯ КОТИРОВОК ---
     BatchRequest:
       type: object
