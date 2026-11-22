@@ -21,13 +21,13 @@ func TestSecuritiesListAndPages(t *testing.T) {
 		columns = r.URL.Query().Get("securities.columns")
 		if r.URL.Query().Get("start") == "0" {
 			_, _ = io.WriteString(w, `{
-				"securities": {"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"],["GAZP",null]]},
+				"securities": {"columns":["SECID","SHORTNAME","ISIN"],"data":[["SBER","Сбербанк","ZZ1234567890"],["GAZP",null,"ZZ0987654321"]]},
 				"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[0,3,2]]}
 			}`)
 			return
 		}
 		_, _ = io.WriteString(w, `{
-			"securities": {"columns":["SHORTNAME","SECID"],"data":[["Лукойл","LKOH"]]},
+			"securities": {"columns":["SHORTNAME","ISIN","SECID"],"data":[["Лукойл","ZZ1111111111","LKOH"]]},
 			"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[2,3,2]]}
 		}`)
 	})
@@ -41,16 +41,16 @@ func TestSecuritiesListAndPages(t *testing.T) {
 	if path != "/iss/engines/stock/markets/shares/securities.json" {
 		t.Fatalf("path = %s", path)
 	}
-	if only != "securities,securities.cursor" || columns != "SECID,SHORTNAME" {
+	if only != "securities,securities.cursor" || columns != "SECID,SHORTNAME,ISIN" {
 		t.Fatalf("only = %s columns = %s", only, columns)
 	}
 	if join(starts) != "0,2" {
 		t.Fatalf("starts = %v", starts)
 	}
 	want := []Security{
-		{SecID: "SBER", ShortName: "Сбербанк"},
-		{SecID: "GAZP", ShortName: "GAZP"},
-		{SecID: "LKOH", ShortName: "Лукойл"},
+		{SecID: "SBER", ShortName: "Сбербанк", ISIN: "ZZ1234567890"},
+		{SecID: "GAZP", ShortName: "GAZP", ISIN: "ZZ0987654321"},
+		{SecID: "LKOH", ShortName: "Лукойл", ISIN: "ZZ1111111111"},
 	}
 	if len(list) != len(want) {
 		t.Fatalf("list = %+v", list)
@@ -59,6 +59,70 @@ func TestSecuritiesListAndPages(t *testing.T) {
 		if list[i] != want[i] {
 			t.Fatalf("row %d = %+v", i, list[i])
 		}
+	}
+}
+
+func TestSecuritiesISINEmptyAndNullValues(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "empty", raw: `""`},
+		{name: "null", raw: `null`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, `{
+					"securities": {
+						"columns": ["SHORTNAME", "ISIN", "SECID"],
+						"data": [["Sberbank", `+tt.raw+`, "SBER"]]
+					}
+				}`)
+			})
+
+			securities, err := client.Securities(context.Background(), SecuritiesQuery{
+				Instrument: Instrument{Engine: "stock", Market: "shares"},
+			})
+			if err != nil {
+				t.Fatalf("Securities: %v", err)
+			}
+			if len(securities) != 1 {
+				t.Fatalf("securities = %+v, want one row", securities)
+			}
+			if securities[0].ISIN != "" {
+				t.Errorf("ISIN = %q, want empty", securities[0].ISIN)
+			}
+			if securities[0].SecID != "SBER" || securities[0].ShortName != "Sberbank" {
+				t.Errorf("security = %+v, want SECID and SHORTNAME parsed by column name", securities[0])
+			}
+		})
+	}
+}
+
+func TestSecuritiesMissingISINColumnIsParseError(t *testing.T) {
+	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{
+			"securities": {
+				"columns": ["SHORTNAME", "SECID"],
+				"data": [["Sberbank", "SBER"]]
+			}
+		}`)
+	})
+
+	_, err := client.Securities(context.Background(), SecuritiesQuery{
+		Instrument: Instrument{Engine: "stock", Market: "shares"},
+	})
+	if !errors.Is(err, ErrParse) {
+		t.Fatalf("err = %v, want ErrParse", err)
+	}
+	var parseErr *ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("err = %v, want *ParseError", err)
+	}
+	if parseErr.Reason != "missing column ISIN" {
+		t.Errorf("parse reason = %q, want %q", parseErr.Reason, "missing column ISIN")
 	}
 }
 
@@ -271,21 +335,21 @@ func TestExternalErrors(t *testing.T) {
 			},
 			{
 				name: "missing data",
-				body: `{"securities":{"columns":["SECID","SHORTNAME"]}}`,
+				body: `{"securities":{"columns":["SECID","SHORTNAME","ISIN"]}}`,
 				call: func(c *Client) error {
 					return call(c.Securities(context.Background(), SecuritiesQuery{Instrument: shares()}))
 				},
 			},
 			{
 				name: "null data",
-				body: `{"securities":{"columns":["SECID","SHORTNAME"],"data":null}}`,
+				body: `{"securities":{"columns":["SECID","SHORTNAME","ISIN"],"data":null}}`,
 				call: func(c *Client) error {
 					return call(c.Securities(context.Background(), SecuritiesQuery{Instrument: shares()}))
 				},
 			},
 			{
 				name: "data is not array",
-				body: `{"securities":{"columns":["SECID","SHORTNAME"],"data":{}}}`,
+				body: `{"securities":{"columns":["SECID","SHORTNAME","ISIN"],"data":{}}}`,
 				call: func(c *Client) error {
 					return call(c.Securities(context.Background(), SecuritiesQuery{Instrument: shares()}))
 				},
@@ -345,7 +409,7 @@ func TestExternalErrors(t *testing.T) {
 	t.Run("timeout", func(t *testing.T) {
 		client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(400 * time.Millisecond)
-			_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
+			_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME","ISIN"],"data":[]}}`)
 		}, WithTimeout(40*time.Millisecond))
 		_, err := client.Securities(context.Background(), SecuritiesQuery{Instrument: shares()})
 		if !errors.Is(err, context.DeadlineExceeded) && !timedOut(err) {
@@ -411,7 +475,7 @@ func TestFractionalCursorIsParseError(t *testing.T) {
 	t.Parallel()
 	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{
-			"securities": {"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"]]},
+			"securities": {"columns":["SECID","SHORTNAME","ISIN"],"data":[["SBER","Сбербанк","ZZ1234567890"]]},
 			"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[0,3,2.5]]}
 		}`)
 	})

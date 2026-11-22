@@ -18,13 +18,13 @@ func TestStockListerListTQBRAndReturnsAllPages(t *testing.T) {
 		path = r.URL.Path
 		if r.URL.Query().Get("start") == "0" {
 			_, _ = io.WriteString(w, `{
-				"securities": {"columns":["SECID","SHORTNAME"],"data":[["SBER","Сбербанк"]]},
+				"securities": {"columns":["SECID","SHORTNAME","ISIN"],"data":[["SBER","Сбербанк","ZZ1234567890"]]},
 				"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[0,2,1]]}
 			}`)
 			return
 		}
 		_, _ = io.WriteString(w, `{
-			"securities": {"columns":["SECID","SHORTNAME"],"data":[["GAZP","Газпром"]]},
+			"securities": {"columns":["SECID","SHORTNAME","ISIN"],"data":[["GAZP","Газпром","ZZ0987654321"]]},
 			"securities.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[1,2,1]]}
 		}`)
 	})
@@ -40,8 +40,8 @@ func TestStockListerListTQBRAndReturnsAllPages(t *testing.T) {
 		t.Errorf("starts = %q, want %q", got, "0,1")
 	}
 	want := []Security{
-		{SecID: "SBER", ShortName: "Сбербанк"},
-		{SecID: "GAZP", ShortName: "Газпром"},
+		{SecID: "SBER", ShortName: "Сбербанк", ISIN: "ZZ1234567890"},
+		{SecID: "GAZP", ShortName: "Газпром", ISIN: "ZZ0987654321"},
 	}
 	if len(securities) != len(want) {
 		t.Fatalf("securities = %+v, want %+v", securities, want)
@@ -92,7 +92,7 @@ func TestStockListerListReturnsClientErrors(t *testing.T) {
 			client: func(t *testing.T) *Client {
 				return newClient(t, func(w http.ResponseWriter, r *http.Request) {
 					time.Sleep(100 * time.Millisecond)
-					_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME"],"data":[]}}`)
+					_, _ = io.WriteString(w, `{"securities":{"columns":["SECID","SHORTNAME","ISIN"],"data":[]}}`)
 				}, WithTimeout(20*time.Millisecond))
 			},
 			wantCause: ErrNetwork,

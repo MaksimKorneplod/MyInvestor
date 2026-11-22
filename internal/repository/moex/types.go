@@ -20,10 +20,11 @@ type SecuritiesQuery struct {
 	Instrument Instrument
 }
 
-// Security — бумага из блока securities: SECID и SHORTNAME.
+// Security — бумага из блока securities: SECID, SHORTNAME и ISIN.
 type Security struct {
 	SecID     string
 	ShortName string
+	ISIN      string
 }
 
 // Quote — последняя котировка из блока marketdata.

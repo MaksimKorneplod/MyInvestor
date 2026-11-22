@@ -187,7 +187,7 @@ func requiredInt(row []json.RawMessage, index int) (int, error) {
 func parseSecurities(pages []table) ([]Security, error) {
 	out := make([]Security, 0)
 	for _, page := range pages {
-		index, err := page.indexes("SECID", "SHORTNAME")
+		index, err := page.indexes("SECID", "SHORTNAME", "ISIN")
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +214,16 @@ func parseSecurities(pages []table) ([]Security, error) {
 			if !ok || name == "" {
 				name = secid
 			}
-			out = append(out, Security{SecID: secid, ShortName: name})
+
+			rawISIN, err := at(row, index["ISIN"])
+			if err != nil {
+				return nil, err
+			}
+			isin, _, err := cellString(rawISIN)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, Security{SecID: secid, ShortName: name, ISIN: isin})
 		}
 	}
 	return out, nil
