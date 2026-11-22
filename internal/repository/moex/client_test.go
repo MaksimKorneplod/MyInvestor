@@ -67,14 +67,14 @@ func TestQuotesBoardSecurityAndNulls(t *testing.T) {
 	var path string
 	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
-		if r.URL.Query().Get("marketdata.columns") != "SECID,LAST,LASTCHANGEPRCNT" {
+		if r.URL.Query().Get("marketdata.columns") != "SECID,LAST,LASTCHANGEPRCNT,TIME" {
 			t.Errorf("columns = %s", r.URL.Query().Get("marketdata.columns"))
 		}
 		if r.URL.Query().Get("start") == "0" {
 			_, _ = io.WriteString(w, `{
 				"marketdata": {
-					"columns": ["SECID","LAST","LASTCHANGEPRCNT"],
-					"data": [["SBER",300.5,1.25],["GAZP",null,2]]
+					"columns": ["SECID","LAST","LASTCHANGEPRCNT","TIME"],
+					"data": [["SBER",300.5,1.25,"14:30:15"],["GAZP",null,2,null]]
 				},
 				"marketdata.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[0,3,2]]}
 			}`)
@@ -82,8 +82,8 @@ func TestQuotesBoardSecurityAndNulls(t *testing.T) {
 		}
 		_, _ = io.WriteString(w, `{
 			"marketdata": {
-				"columns": ["LASTCHANGEPRCNT","LAST","SECID"],
-				"data": [[null,7000,"LKOH"]]
+				"columns": ["LASTCHANGEPRCNT","LAST","SECID","TIME"],
+				"data": [[null,7000,"LKOH","15:45:00"]]
 			},
 			"marketdata.cursor": {"columns":["INDEX","TOTAL","PAGESIZE"],"data":[[2,3,2]]}
 		}`)
@@ -106,6 +106,15 @@ func TestQuotesBoardSecurityAndNulls(t *testing.T) {
 	}
 	if quotes[1].SecID != "LKOH" || quotes[1].Last.String() != "7000" || quotes[1].LastChangePercent != nil {
 		t.Fatalf("lkoh = %+v", quotes[1])
+	}
+	if quotes[0].UpdateTime.IsZero() {
+		t.Fatalf("UpdateTime is zero")
+	}
+	if quotes[0].QuoteTime == nil || quotes[0].QuoteTime.Hour() != 14 || quotes[0].QuoteTime.Minute() != 30 || quotes[0].QuoteTime.Second() != 15 {
+		t.Fatalf("SBER QuoteTime = %v", quotes[0].QuoteTime)
+	}
+	if quotes[1].QuoteTime == nil || quotes[1].QuoteTime.Hour() != 15 || quotes[1].QuoteTime.Minute() != 45 {
+		t.Fatalf("LKOH QuoteTime = %v", quotes[1].QuoteTime)
 	}
 }
 
@@ -256,12 +265,12 @@ func TestExternalErrors(t *testing.T) {
 			},
 			{
 				name: "wrong type",
-				body: `{"marketdata":{"columns":["SECID","LAST","LASTCHANGEPRCNT"],"data":[["SBER","nope",1]]}}`,
+				body: `{"marketdata":{"columns":["SECID","LAST","LASTCHANGEPRCNT", "TIME"],"data":[["SBER","nope",1,"12:00:00"]]}}`,
 				call: func(c *Client) error { return call(c.Quotes(context.Background(), shares())) },
 			},
 			{
 				name: "short row",
-				body: `{"marketdata":{"columns":["SECID","LAST","LASTCHANGEPRCNT"],"data":[["SBER"]]}}`,
+				body: `{"marketdata":{"columns":["SECID","LAST","LASTCHANGEPRCNT", "TIME"],"data":[["SBER"]]}}`,
 				call: func(c *Client) error { return call(c.Quotes(context.Background(), shares())) },
 			},
 			{
@@ -288,6 +297,13 @@ func TestExternalErrors(t *testing.T) {
 				body: `{"securities":{"columns":["SECID","SHORTNAME"],"data":{}}}`,
 				call: func(c *Client) error {
 					return call(c.Securities(context.Background(), SecuritiesQuery{Instrument: shares()}))
+				},
+			},
+			{
+				name: "wrong time format",
+				body: `{"marketdata":{"columns":["SECID","LAST","LASTCHANGEPRCNT","TIME"],"data":[["SBER",100,1,"not-a-time"]]}}`,
+				call: func(c *Client) error {
+					return call(c.Quotes(context.Background(), shares()))
 				},
 			},
 		}
@@ -389,7 +405,7 @@ func TestSamePageDoesNotLoop(t *testing.T) {
 	client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		_, _ = io.WriteString(w, `{
-			"marketdata": {"columns":["SECID","LAST","LASTCHANGEPRCNT"],"data":[["SBER",293.99,-0.06]]}
+			"marketdata": {"columns":["SECID","LAST","LASTCHANGEPRCNT", "TIME"],"data":[["SBER",293.99,-0.06,"10:00:00"]]}
 		}`)
 	})
 
