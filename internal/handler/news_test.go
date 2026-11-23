@@ -69,6 +69,8 @@ func TestNewsHandlerReturnsNewsFields(t *testing.T) {
 			Link:        "https://example.com/latest",
 			Description: "News summary",
 			PubDate:     "Wed, 04 Jan 2006 10:00:00 GMT",
+			Category:    "Экономика",
+			Image:       "https://example.com/news.jpg",
 		},
 	}}}}
 	rec := httptest.NewRecorder()
@@ -83,7 +85,8 @@ func TestNewsHandlerReturnsNewsFields(t *testing.T) {
 	}
 	item := got.Items[0]
 	if item.Title != "Latest" || item.Link != "https://example.com/latest" ||
-		item.Description != "News summary" || item.PubDate == "" {
+		item.Description != "News summary" || item.PubDate == "" || item.Category != "Экономика" ||
+		item.Image != "https://example.com/news.jpg" {
 		t.Errorf("news item fields = %+v", item)
 	}
 }

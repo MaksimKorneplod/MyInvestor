@@ -6,8 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 )
+
+var descriptionImageRe = regexp.MustCompile(`(?i)<img[^>]+src\s*=\s*["']([^"']+)["']`)
 
 func parseRss(r io.Reader) (RssFeed, error) {
 	var feed RssFeed
@@ -33,6 +36,7 @@ func filterRssFeed(r io.Reader) (RssFeed, error) {
 		item.Link = strings.TrimSpace(item.Link)
 		item.Category = strings.TrimSpace(item.Category)
 		item.PubDate = strings.TrimSpace(item.PubDate)
+		item.Image = extractItemImage(item)
 		if err := validateItem(item); err != nil {
 			slog.Warn("skipping invalid RSS item", "guid", item.GUID, "title", item.Title, "error", err)
 			continue
@@ -43,6 +47,37 @@ func filterRssFeed(r io.Reader) (RssFeed, error) {
 		feed.Channel.Items = append(feed.Channel.Items, item)
 	}
 	return feed, nil
+}
+
+func extractItemImage(item RssItem) string {
+	if item.Enclosure != nil &&
+		(item.Enclosure.Type == "" || strings.HasPrefix(strings.ToLower(item.Enclosure.Type), "image/")) &&
+		validImageURL(item.Enclosure.URL) {
+		return strings.TrimSpace(item.Enclosure.URL)
+	}
+	for _, media := range item.MediaContent {
+		if (media.Medium == "" || strings.EqualFold(media.Medium, "image")) &&
+			(media.Type == "" || strings.HasPrefix(strings.ToLower(media.Type), "image/")) &&
+			validImageURL(media.URL) {
+			return strings.TrimSpace(media.URL)
+		}
+	}
+	for _, media := range item.MediaThumbnail {
+		if validImageURL(media.URL) {
+			return strings.TrimSpace(media.URL)
+		}
+	}
+	if match := descriptionImageRe.FindStringSubmatch(item.Description); len(match) == 2 && validImageURL(match[1]) {
+		return strings.TrimSpace(match[1])
+	}
+	return ""
+}
+
+func validImageURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	return err == nil &&
+		(parsed.Scheme == "http" || parsed.Scheme == "https") &&
+		parsed.Host != ""
 }
 
 func validateItem(item RssItem) error {

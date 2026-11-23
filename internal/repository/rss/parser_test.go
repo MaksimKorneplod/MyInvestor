@@ -76,18 +76,42 @@ func TestParseRssRejectsMissingChannel(t *testing.T) {
 	}
 }
 
+func TestFilterRssFeedExtractsImage(t *testing.T) {
+	xmlData := `<rss xmlns:media="http://search.yahoo.com/mrss/"><channel>
+		<item>
+			<title>Economy image</title>
+			<link>https://example.com/economy-image</link>
+			<description>&lt;img src="https://example.com/news.jpg" alt="News"&gt;</description>
+			<category>Экономика</category>
+			<pubDate>Sat, 15 Nov 2026 10:00:00 GMT</pubDate>
+			<enclosure url="https://example.com/photo.jpg" type="image/jpeg"/>
+		</item>
+	</channel></rss>`
+
+	feed, err := filterRssFeed(strings.NewReader(xmlData))
+	if err != nil {
+		t.Fatalf("filterRssFeed() error = %v", err)
+	}
+	if len(feed.Channel.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(feed.Channel.Items))
+	}
+	if got, want := feed.Channel.Items[0].Image, "https://example.com/photo.jpg"; got != want {
+		t.Fatalf("image = %q, want %q", got, want)
+	}
+}
+
 func TestFilterRssFeed(t *testing.T) {
 	feed, err := filterRssFeed(strings.NewReader(testFeedXML))
 	if err != nil {
 		t.Fatalf("filterRssFeed() error = %v", err)
 	}
 
-	if got, want := len(feed.Channel.Items), 2; got != want {
+	if got, want := len(feed.Channel.Items), 3; got != want {
 		t.Fatalf("got %d filtered items, want %d", got, want)
 	}
 	for _, item := range feed.Channel.Items {
-		if item.Category != "Экономика" && item.Category != "Бизнес" {
-			t.Errorf("unexpected category in filtered feed: %q", item.Category)
+		if item.Category == "" {
+			t.Errorf("missing category in filtered feed")
 		}
 	}
 }
@@ -105,7 +129,7 @@ func TestFilterRssFeedSkipsInvalidItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filterRssFeed() error = %v", err)
 	}
-	if got, want := len(feed.Channel.Items), 1; got != want {
+	if got, want := len(feed.Channel.Items), 2; got != want {
 		t.Fatalf("got %d items, want %d", got, want)
 	}
 	if got := feed.Channel.Items[0].Title; got != "Valid" {

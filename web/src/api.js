@@ -60,19 +60,22 @@ export function instruments({ q = '', limit = 50, offset = 0 } = {}) {
 }
 
 export function quoteBatch(tickers) {
-  return api('/api/v1/quotes:batch', { method: 'POST', body: { ...SHARES, tickers } })
+  const normalized = Array.from(new Set(tickers.map(ticker => String(ticker).trim().toUpperCase()).filter(Boolean)))
+  return api('/api/v1/quotes:batch', { method: 'POST', body: { ...SHARES, tickers: normalized } })
 }
 
 export function oneQuote(ticker) {
+  const normalized = String(ticker).trim().toUpperCase()
   const q = new URLSearchParams({ board: SHARES.board })
-  return api(`/api/v1/quotes/${SHARES.engine}/${SHARES.market}/${encodeURIComponent(ticker)}?${q}`)
+  return api(`/api/v1/quotes/${SHARES.engine}/${SHARES.market}/${encodeURIComponent(normalized)}?${q}`)
 }
 
 export function history(ticker, period) {
   const q = new URLSearchParams({ period })
-  return api(`/api/v1/instruments/${encodeURIComponent(ticker)}/history?${q}`)
+  return api(`/api/v1/instruments/${encodeURIComponent(String(ticker).trim().toUpperCase())}/history?${q}`)
 }
 
-export function news(limit = 30) {
-  return api(`/api/v1/news?limit=${limit}`)
+export function news(limit = 30, offset = 0) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  return api(`/api/v1/news?${params}`)
 }

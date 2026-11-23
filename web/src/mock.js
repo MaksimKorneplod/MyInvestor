@@ -98,9 +98,9 @@ export function series(seed, n, endDelta, amp) {
 
 const nf2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const nf0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
-export const fmt2 = v => '$' + nf2.format(v)
-export const fmt0 = v => '$' + nf0.format(v)
-export const fmtK = v => '$' + new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(v / 1000) + 'к'
+export const fmt2 = v => nf2.format(v) + ' ₽'
+export const fmt0 = v => nf0.format(v) + ' ₽'
+export const fmtK = v => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(v / 1000) + ' тыс. ₽'
 export const fmtPct = v => (v >= 0 ? '+' : '−') + nf2.format(Math.abs(v)) + '%'
 export const fmtMoney = (v, compact) => compact && Math.abs(v) >= 100000 ? fmtK(v) : fmt2(v)
 export const chgOf = x => (x.p / x.pc - 1) * 100

@@ -1,13 +1,85 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { assetSeries, Donut, LineChart, portfolioSeries, Spark } from './charts'
-import { Bull, Icon, Mark, NewsArt } from './icons'
+import { Bull, Icon, Mark } from './icons'
 import { FEE, TRADERS, allocOf, chgOf, dayPL, fmt0, fmt2, fmtMoney, fmtPct, investedVal, levelOf, myRet, totalVal, unrealPL } from './mock'
 import { findAsset, useStudio } from './studio'
+import { ApiError, news } from './api'
 
 const tiny = { width: 12, height: 12 }
 
+export function NewsFeed() {
+  const { actions } = useStudio()
+  const pageSize = 50
+  const [offset, setOffset] = useState(0)
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  const [refresh, setRefresh] = useState(0)
+
+  useEffect(() => {
+    let live = true
+    setError('')
+    news(pageSize, offset)
+      .then(payload => { if (live) setData(payload) })
+      .catch(err => { if (live) { setData(null); setError(err instanceof ApiError ? err.message : 'Лента новостей недоступна') } })
+    return () => { live = false }
+  }, [offset, refresh])
+
+  const items = data?.items || []
+  const total = data?.total || 0
+  const from = total ? offset + 1 : 0
+  const to = Math.min(offset + items.length, total)
+
+  return (
+    <>
+      <div className="pagehead enter">
+        <h1>Новости</h1>
+        <span className="sub">Лента Интерфакс · актуальные новости рынка и экономики</span>
+        <div className="right">
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setRefresh(value => value + 1)}><Icon name="trend" /> Обновить</button>
+        </div>
+      </div>
+      <div className="card news-page">
+        {data === null && !error && <p className="muted">Загружаем ленту новостей…</p>}
+        {error && <p className="aerr">{error}</p>}
+        {data && !items.length && <div className="emptybox"><Icon name="news" /><b>Новостей нет</b><p>Источник сейчас не вернул новости.</p></div>}
+        {!!items.length && (
+          <>
+            <div className="news-page-meta dim">{from}–{to} из {total}</div>
+            <div className="news-page-list">
+              {items.map((item, index) => (
+                <article className="nitem news-page-item" key={item.link || `${item.title}-${index}`}>
+                  {item.image && (
+                    <div className="nthumb">
+                      <img className="news-image" src={item.image} alt="" loading="lazy" onError={event => { event.currentTarget.closest('.nthumb')?.remove() }} />
+                    </div>
+                  )}
+                  <div className="ntxt">
+                    {item.category && <span className="nchip2">{item.category}</span>}
+                    <h4>{item.title}</h4>
+                    {item.description && <p>{item.description}</p>}
+                    <div className="nmeta">
+                      <span>{item.pubDate || 'Интерфакс'}</span>
+                      <a href={item.link} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}>Источник</a>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+        {total > pageSize && (
+          <div className="pager">
+            <button className="btn btn-ghost btn-sm" type="button" disabled={offset === 0} onClick={() => setOffset(value => Math.max(0, value - pageSize))}>Назад</button>
+            <button className="btn btn-ghost btn-sm" type="button" disabled={offset + pageSize >= total} onClick={() => setOffset(value => value + pageSize)}>Дальше</button>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
 function moneySigned(value, compact) {
-  return `${value >= 0 ? '+' : '−'}${fmt2(Math.abs(value)).slice(1)}`
+  return `${value >= 0 ? '+' : '−'}${fmt2(Math.abs(value)).replace(' ₽', '')}`
 }
 
 export function Home() {
@@ -28,7 +100,7 @@ export function Home() {
         <button className="btn btn-ghost btn-sm" onClick={() => actions.tick()}><Icon name="trend" /> Обновить котировки</button>
         <button className="btn btn-brand btn-sm" onClick={() => actions.openTopup()}><Icon name="plus" /> Пополнить</button>
       </div>
-      <span className="sub">Суббота, 22 ноября 2026 · демо-данные симулятора · котировки обновляются по кнопке и автоматически</span></div>
+      <span className="sub">Демо-портфель и аккаунт · котировки MOEX загружаются по API · новости и история обновляются по API</span></div>
       <div className="balance enter" style={{ '--d': '.05s' }}>
         <svg className="arrowbg" viewBox="0 0 240 240"><path d="M30 210 L150 90 L120 88 L190 30 L182 108 L160 100 L60 220 Z" fill="#E8112D" /><path d="M10 190 C 80 150 120 190 230 60" stroke="#E8112D" strokeWidth="10" fill="none" opacity=".5" strokeLinecap="round" /></svg>
         <div className="bleft"><div className="lbl"><span className="live" />Ваш инвестиционный счёт</div>
@@ -73,13 +145,17 @@ export function Home() {
       {news[0] && (
         <div className="newsrow enter" style={{ '--d': '.16s' }}>
           <article className="nfeature" role="button" tabIndex={0} onClick={() => actions.openNews(news[0].id)}>
-            {news[0].art === 'apple' ? <NewsArt art="apple" /> : <div className="nimg"><NewsArt art={news[0].art} /></div>}
-            <div className="nbody"><h3>{news[0].t}</h3><div className="nmeta"><Icon name="clock" /><span>{news[0].m}</span></div></div>
+            {news[0].image && <div className="nimg"><img className="news-image" src={news[0].image} alt="" loading="lazy" onError={event => { event.currentTarget.closest('.nimg')?.remove() }} /></div>}
+            <div className="nbody">
+              {news[0].cat && <span className="nchip2">{news[0].cat}</span>}
+              <h3>{news[0].t}</h3>
+              <div className="nmeta"><Icon name="clock" /><span>{news[0].m}</span></div>
+            </div>
           </article>
           <div className="nside">
             {news.slice(1, 3).map(item => (
               <article key={item.id} className="nitem" role="button" tabIndex={0} onClick={() => actions.openNews(item.id)}>
-                <div className="nthumb">{item.art === 'desk' ? <NewsArt art="desk" /> : item.art === 'flag' ? <NewsArt art="flag" /> : <Bull />}</div>
+                {item.image && <div className="nthumb"><img className="news-image" src={item.image} alt="" loading="lazy" onError={event => { event.currentTarget.closest('.nthumb')?.remove() }} /></div>}
                 <div className="ntxt"><span className="nchip2">{item.cat}</span><h4>{item.t}</h4><div className="nmeta"><span>{item.m}</span></div></div>
               </article>
             ))}
@@ -315,8 +391,6 @@ export function Settings() {
           {row('undo', 'Сброс демо-данных', 'Вернуть стартовый счёт, позиции и прогресс. Можно отменить сразу после сброса.', <button className="btn btn-down btn-sm" onClick={() => actions.reset()}><Icon name="trash" /> Сбросить</button>)}
         </div>
       </div>
-      <div className="card enter" style={{ '--d': '.1s', marginTop: 16 }}><div className="sechead" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 16 }}>Что исправлено в этом редизайне</h2></div>
-        <p style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 820 }}>Бренд-красный отделён от семантики данных; весь вторичный текст ≥ 4.5:1; графики получили оси, тултипы и маркеры последних точек; донат — четыре различимых hue с прямыми подписями; единый форматтер Intl ru-RU; пустые состояния избранного, портфеля, истории и поиска; тач-таргеты ≥ 44px; focus-состояния и клавиатура; актуальные даты новостей с источниками.</p></div>
     </>
   )
 }
@@ -347,7 +421,7 @@ export function Drawers() {
     const item = model.account.news.find(row => row.id === drawer.id)
     if (!item) return null
     return <Shell title="Новости рынка" sub={`${item.cat} · ${item.m}`}>
-      <div className={`lesson-art ${item.art === 'apple' ? 'art-apple' : item.art === 'bull' ? 'art-bull' : ''}`} style={item.art === 'desk' ? { background: '#0E1626' } : item.art === 'flag' ? { background: '#F5F0EB' } : undefined}><NewsArt art={item.art} /></div>
+      {item.image && <div className="lesson-art news-detail-image"><img className="news-image" src={item.image} alt="" onError={event => { event.currentTarget.closest('.news-detail-image')?.remove() }} /></div>}
       <div className="newsreader"><span className="nchip2">{item.cat}</span><h3 style={{ fontSize: 19, margin: '8px 0 4px' }}>{item.t}</h3>
         <div className="nmeta" style={{ marginBottom: 12 }}><Icon name="clock" /><span>{item.m}</span></div>
         {item.body.map(([head, text]) => <div key={head}><h4>{head}</h4><p>{text}</p></div>)}
@@ -358,7 +432,7 @@ export function Drawers() {
   }
   return <Shell title="Все новости" sub="лента · 22 ноября 2026">
     {model.account.news.map(item => <article key={item.id} className="nitem" style={{ marginBottom: 12 }} role="button" tabIndex={0} onClick={() => actions.openNews(item.id)}>
-      <div className={`nthumb ${item.art === 'apple' ? 'art-apple' : ''}`}><NewsArt art={item.art === 'apple' ? 'apple' : item.art} /></div>
+      {item.image && <div className="nthumb"><img className="news-image" src={item.image} alt="" loading="lazy" onError={event => { event.currentTarget.closest('.nthumb')?.remove() }} /></div>}
       <div className="ntxt"><span className="nchip2">{item.cat}</span><h4>{item.t}</h4><div className="nmeta"><span>{item.m}</span></div></div>
     </article>)}
   </Shell>
