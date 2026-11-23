@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Logo, Icon, Mark } from './icons'
 import { instruments } from './api'
 import { LESSONS, TRADERS, chgOf, dayPL, fmt2, fmtMoney, fmtPct, levelOf, myRet, totalVal } from './mock'
-import { Drawers, Home, Learn, Portfolio, Rating, Settings } from './screens'
+import { Drawers, Home, Learn, NewsFeed, Portfolio, Rating, Settings } from './screens'
 import { MarketScreen, TickerPage } from './board'
 import { StudioProvider, useStudio } from './studio'
 
-const NAV = [['home', 'home', 'Главная'], ['portfolio', 'case', 'Портфель'], ['rating', 'trophy', 'Рейтинг'], ['learn', 'book', 'Обучение'], ['settings', 'gear', 'Настройки']]
+const NAV = [['home', 'home', 'Главная'], ['portfolio', 'case', 'Портфель'], ['rating', 'trophy', 'Рейтинг'], ['news', 'news', 'Новости'], ['learn', 'book', 'Обучение'], ['settings', 'gear', 'Настройки']]
 
 function Defs() {
   return (
@@ -97,7 +97,7 @@ function Shell() {
       <div className="aurora" aria-hidden="true"><i className="a1" /><i className="a2" /><i className="a3" /></div>
       <div className={`side-scrim${model.sideOpen ? ' open' : ''}`} onClick={() => actions.closeSide()} />
       <aside className={`sidebar${model.sideOpen ? ' open' : ''}`}>
-        <div className="logo"><Logo /><div><b>MyInvestor</b><small>СИМУЛЯТОР · v2.0</small></div></div>
+        <div className="logo"><Logo /><div><b>MyInvestor</b><small>УЧИСЬ · ТОРГУЙ · РАСТИ</small></div></div>
         <nav className="snav" aria-label="Основная навигация">
           {NAV.map(([page, icon, name]) => <button key={page} className={model.page === page || (page === 'portfolio' && model.page === 'ticker') ? 'on' : ''} onClick={() => actions.nav(page)}><Icon name={icon} /><span>{name}</span>{page === 'learn' ? <span className="nbadge">{account.lessons.length}/8</span> : null}</button>)}
         </nav>
@@ -130,6 +130,7 @@ function Shell() {
           {model.page === 'ticker' && <TickerPage />}
           {model.page === 'portfolio' && <Portfolio />}
           {model.page === 'rating' && <Rating />}
+          {model.page === 'news' && <NewsFeed />}
           {model.page === 'learn' && <Learn />}
           {model.page === 'settings' && <Settings />}
         </main>
@@ -178,7 +179,7 @@ function Modal() {
         {modal === 'topup' && <>
           <h3>Пополнение счёта</h3><p className="msub">Демо-операция симулятора · без реальных денег · сейчас свободно {fmt2(account.cash)}</p>
           <label htmlFor="topAmt">Сумма пополнения</label>
-          <div className="minput"><span>$</span><input id="topAmt" inputMode="decimal" autoComplete="off" placeholder="0.00" value={model.topAmt} onChange={e => actions.setTopAmt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') actions.execTopup() }} /></div>
+          <div className="minput"><span>₽</span><input id="topAmt" inputMode="decimal" autoComplete="off" placeholder="0.00" value={model.topAmt} onChange={e => actions.setTopAmt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') actions.execTopup() }} /></div>
           <div className="mquick"><button onClick={() => actions.addTop(1000)}>+1 000</button><button onClick={() => actions.addTop(5000)}>+5 000</button><button onClick={() => actions.addTop(10000)}>+10 000</button></div>
           <div className="mactions"><button className="btn btn-ghost" onClick={() => actions.closeModal()}>Отмена</button><button className="btn btn-brand" onClick={() => actions.execTopup()}><Icon name="coins" /> Пополнить</button></div>
         </>}

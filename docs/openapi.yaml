@@ -130,7 +130,7 @@ paths:
       operationId: getNews
       summary: Get filtered news from Interfax
       description: |
-        Reads the Interfax RSS feed and returns news in the «Экономика» and «Бизнес» categories.
+        Reads the Interfax RSS feed and returns validated news items.
         Items are ordered by publication date descending; items without a
         publication date follow dated items in source order. See docs/news.md
         for source details and record validation rules.
@@ -175,6 +175,13 @@ paths:
                         pubDate:
                           type: string
                           description: Original RSS publication date.
+                        category:
+                          type: string
+                          description: Category assigned by the RSS source.
+                        image:
+                          type: string
+                          format: uri
+                          description: Best available image URL from RSS enclosure or media/HTML description.
                   total:
                     type: integer
                     description: Number of matching items before pagination.

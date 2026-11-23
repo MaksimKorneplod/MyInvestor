@@ -26,12 +26,12 @@ func TestClientRead(t *testing.T) {
 		t.Fatalf("Read() error = %v", err)
 	}
 
-	if got, want := len(feed.Channel.Items), 2; got != want {
+	if got, want := len(feed.Channel.Items), 3; got != want {
 		t.Fatalf("got %d filtered items, want %d", got, want)
 	}
 	for _, item := range feed.Channel.Items {
-		if item.Category != "Экономика" && item.Category != "Бизнес" {
-			t.Errorf("unexpected category in response: %q", item.Category)
+		if item.Category == "" {
+			t.Errorf("missing category in response")
 		}
 	}
 }

@@ -29,6 +29,8 @@ type newsItemResponse struct {
 	Link        string `json:"link"`
 	Description string `json:"description,omitempty"`
 	PubDate     string `json:"pubDate,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Image       string `json:"image,omitempty"`
 }
 
 type newsResponse struct {
@@ -90,6 +92,8 @@ func NewsHandler(reader NewsReader) http.HandlerFunc {
 				Link:        item.Link,
 				Description: item.Description,
 				PubDate:     item.PubDate,
+				Category:    item.Category,
+				Image:       item.Image,
 			})
 		}
 		writeNewsJSON(w, http.StatusOK, newsResponse{

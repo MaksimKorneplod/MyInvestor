@@ -255,7 +255,7 @@ export function StudioProvider({ children }) {
       setModel(m => ({ ...m, drawer: { type: 'lesson', id }, dd: null, query: '' }))
     },
     openNews(id) { snd('click'); setModel(m => ({ ...m, drawer: { type: 'news', id: Number(id) } })) },
-    openNewsList() { snd('click'); setModel(m => ({ ...m, drawer: { type: 'newslist' } })) },
+    openNewsList() { snd('click'); setModel(m => ({ ...m, page: 'news', drawer: null, dd: null, sideOpen: false, query: '' })); window.scrollTo({ top: 0, behavior: 'smooth' }) },
     closeDrawer() { setModel(m => ({ ...m, drawer: null })) },
     setSide(side) { snd('click'); setModel(m => ({ ...m, trade: { ...m.trade, side } })) },
     setQty(qty) { setModel(m => ({ ...m, trade: { ...m.trade, qty } })) },

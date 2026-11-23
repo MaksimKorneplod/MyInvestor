@@ -9,12 +9,27 @@ import (
 
 // Распарщеная новость
 type RssItem struct {
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	Description string `xml:"description"`
-	Category    string `xml:"category"`
-	PubDate     string `xml:"pubDate"`
-	GUID        string `xml:"guid"`
+	Title          string        `xml:"title"`
+	Link           string        `xml:"link"`
+	Description    string        `xml:"description"`
+	Category       string        `xml:"category"`
+	PubDate        string        `xml:"pubDate"`
+	GUID           string        `xml:"guid"`
+	Image          string        `xml:"-"`
+	Enclosure      *RssEnclosure `xml:"enclosure"`
+	MediaContent   []RssMedia    `xml:"content"`
+	MediaThumbnail []RssMedia    `xml:"thumbnail"`
+}
+
+type RssEnclosure struct {
+	URL  string `xml:"url,attr"`
+	Type string `xml:"type,attr"`
+}
+
+type RssMedia struct {
+	URL    string `xml:"url,attr"`
+	Medium string `xml:"medium,attr"`
+	Type   string `xml:"type,attr"`
 }
 
 // Слайс распарщеных новостей

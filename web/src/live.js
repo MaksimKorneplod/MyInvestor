@@ -3,20 +3,21 @@ import { MOCK_NEWS, PERIODS } from './mock'
 
 export async function loadNews() {
   try {
-    const data = await news(5)
-    if (!data?.items?.length) return null
+    const data = await news(100)
+    if (!data?.items?.length) return MOCK_NEWS
     const arts = ['desk', 'flag', 'bull', 'desk', 'flag']
     return data.items.slice(0, 5).map((item, i) => ({
       id: i + 1,
-      cat: i % 2 ? 'Бизнес' : 'Экономика',
+      cat: item.category || (/эконом|инфляц|рынок/i.test(`${item.title} ${item.description}`) ? 'Экономика' : 'Бизнес'),
       t: item.title,
       m: item.pubDate || 'Интерфакс',
       art: arts[i % arts.length],
       link: item.link,
+      image: item.image || '',
       body: [['Материал', item.description || 'Новость Интерфакса.'], ['Источник', item.link]],
     }))
   } catch {
-    return null
+    return MOCK_NEWS
   }
 }
 
